@@ -65,11 +65,12 @@ import {
 // Program IDs (devnet)
 // ============================================================================
 
+// Small tier program (256 accounts, ~0.44 SOL rent)
 const PROGRAM_ID_DEVNET = new PublicKey(
-  "FxfD37s1AZTeWfFQps9Zpebi2dNQ9QSSDtfMKdbsfKrD",
+  "FwfBKZXbYr4vTK23bMFkbgKq3npJ3MSDxEaKmq9Aj4Qn",
 );
 const MATCHER_PROG_ID = new PublicKey(
-  "GDK8wx38kpiSVSfGTVNiSdptX3Z5R4kQyqh6Q3QX6wmi",
+  "GTRgyTDfrMvBubALAqtHuQwT8tbGyXid7svXZKtWfC9k",
 );
 const STAKE_PROG_ID = new PublicKey(
   "DC5fovFQD5SZYsetwvEqd4Wi4PFY1Yfnc669VMe6oa7F",
@@ -87,7 +88,7 @@ const CLAWD_DEVNET = new PublicKey(
 // Slab constants
 // ============================================================================
 
-const SLAB_DATA_SIZE = SLAB_TIERS_V12_19.large.dataSize;
+const SLAB_DATA_SIZE = SLAB_TIERS_V12_19.small.dataSize;
 const MATCHER_CTX_SIZE = 320;
 
 // ============================================================================
