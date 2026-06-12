@@ -73,6 +73,18 @@
       "flatted": ">=3.4.0",
       "defu": ">=6.1.5",
       "vite": ">=7.3.2"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "@reown/appkit",
+      "@sentry/cli",
+      "bigint-buffer",
+      "bufferutil",
+      "esbuild",
+      "keccak",
+      "msw",
+      "sharp",
+      "unrs-resolver",
+      "utf-8-validate"
+    ]
   }
 }
