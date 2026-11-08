@@ -9,10 +9,14 @@ import {
   parseAllAccounts,
   parseConfig,
   parseParams,
+  parsePortfolioV17,
+  parseWrapperConfigV17,
+  isV17Account,
   AccountKind,
   computeLiqPrice,
   computeMarkPnl,
   computePnlPercent,
+  V17_HEADER_LEN,
   type DiscoveredMarket,
   type Account,
 } from "@percolatorct/sdk";
@@ -207,78 +211,117 @@ export function usePortfolio(): PortfolioData {
           }
           
           try {
-            const accounts = parseAllAccounts(accountInfo.data);
-            
-            // Parse config and params for this market (needed for oracle price + risk params)
-            let oraclePriceE6 = 0n;
-            let maintenanceMarginBps = 500n; // default 5%
-            try {
-              const config = parseConfig(accountInfo.data);
-              // GH#1990: lastEffectivePriceE6 is the raw oracle price (pre-inversion).
-              // Apply invert flag so oraclePriceE6 is in the same domain as entryPrice
-              // (which is stored post-inversion on-chain). Without this, PnL and
-              // liquidation calculations are directionally wrong for inverted markets.
-              const rawPriceE6 = config.lastEffectivePriceE6;
-              oraclePriceE6 = sanitizePriceE6(applyInvert(rawPriceE6, config.invert));
-              const params = parseParams(accountInfo.data);
-              maintenanceMarginBps = params.maintenanceMarginBps;
-            } catch {
-              // If config parse fails, use defaults
-            }
+            const slabData = accountInfo.data;
+            const slabAddrStr = market.slabAddress.toBase58();
 
-            for (const { idx, account } of accounts) {
-              if (account.kind === AccountKind.User && account.owner.toBase58() === pkStr) {
-                // V12_1: entry_price was removed from on-chain struct. Fall back to
-                // localStorage (saved by TradeForm at trade time) so portfolio PnL
-                // and liq-price compute correctly instead of showing 0/—.
-                const slabAddrStr = market.slabAddress.toBase58();
-                const effectiveEntryPrice =
-                  account.entryPrice > 0n ? account.entryPrice : getEntryPrice(slabAddrStr, idx);
+            if (isV17Account(slabData)) {
+              // ── v17 market path ────────────────────────────────────────────
+              // v17 portfolios are standalone program-owned accounts. We scan
+              // getProgramAccounts for this user's portfolio on this market.
+              // The program that owns the slab is accountInfo.owner.
+              const v17ProgramId = accountInfo.owner;
+              const slabPk = market.slabAddress; // Already a PublicKey
 
-                // Compute liquidation price
+              // Oracle price: read markEwmaE6 from v17 WrapperConfigV17 (at V17_HEADER_LEN).
+              let oraclePriceE6 = 0n;
+              let maintenanceMarginBps = 500n;
+              try {
+                const wCfg = parseWrapperConfigV17(slabData, V17_HEADER_LEN);
+                // markEwmaE6 is the last effective price in v17 wrapper config.
+                oraclePriceE6 = sanitizePriceE6(wCfg.markEwmaE6);
+              } catch {
+                // Use defaults if parse fails
+              }
+
+              const V17_PORTFOLIO_MAGIC_P = Buffer.from([0x00, 0x36, 0x31, 0x56, 0x43, 0x52, 0x45, 0x50]);
+              const portfolioResults = await connection.getProgramAccounts(v17ProgramId, {
+                filters: [
+                  { memcmp: { offset: 0, bytes: V17_PORTFOLIO_MAGIC_P.toString("base64"), encoding: "base64" } },
+                  { memcmp: { offset: 16, bytes: slabPk.toBase58() } },
+                  { memcmp: { offset: 80, bytes: publicKey!.toBase58() } },
+                ],
+              });
+
+              for (const { account: portAcct } of portfolioResults) {
+                if (cancelled) return;
+                const portData = portAcct.data instanceof Buffer ? portAcct.data : Buffer.from(portAcct.data);
+                const portfolio = parsePortfolioV17(portData);
+
+                // Map v17 portfolio to the Account shape used by the rest of usePortfolio
+                const ZERO_PK = new PublicKey(new Uint8Array(32));
+                const activeLeg = portfolio.legs.find((l) => l.active);
+                const positionSize = activeLeg ? activeLeg.basisPosQ : 0n;
+
+                const account: Account = {
+                  kind: AccountKind.User,
+                  accountId: 0n,
+                  capital: portfolio.capital,
+                  pnl: portfolio.pnl,
+                  reservedPnl: portfolio.reservedPnl,
+                  warmupStartedAtSlot: 0n,
+                  warmupSlopePerStep: 0n,
+                  positionSize,
+                  entryPrice: 0n,
+                  fundingIndex: 0n,
+                  matcherProgram: ZERO_PK,
+                  matcherContext: ZERO_PK,
+                  owner: portfolio.owner,
+                  feeCredits: portfolio.feeCredits,
+                  lastFeeSlot: portfolio.lastFeeSlot,
+                  feesEarnedTotal: 0n,
+                  exactReserveCohorts: null,
+                  exactCohortCount: null,
+                  overflowOlder: null,
+                  overflowOlderPresent: null,
+                  overflowNewest: null,
+                  overflowNewestPresent: null,
+                  fSnap: 0n,
+                  adlABasis: 0n,
+                  adlKSnap: 0n,
+                  adlEpochSnap: 0n,
+                  schedPresent: null,
+                  schedRemainingQ: null,
+                  schedAnchorQ: null,
+                  schedStartSlot: null,
+                  schedHorizon: null,
+                  schedReleaseQ: null,
+                  pendingPresent: null,
+                  pendingRemainingQ: null,
+                  pendingHorizon: null,
+                  pendingCreatedSlot: null,
+                } as Account;
+
+                const effectiveEntryPrice = getEntryPrice(slabAddrStr, 0);
                 const liquidationPriceE6 = computeLiqPrice(
                   effectiveEntryPrice,
                   account.capital,
                   account.positionSize,
                   maintenanceMarginBps,
                 );
-
-                // Compute unrealized PnL using oracle price.
-                // GH#1331: account.pnl can be u64::MAX sentinel for uninitialized/flat
-                // positions. Guard it with isSentinelValue to prevent billion-dollar
-                // phantom PnL on the dashboard when oracle price is unavailable.
                 const unrealizedPnl = oraclePriceE6 > 0n && effectiveEntryPrice > 0n
                   ? computeMarkPnl(account.positionSize, effectiveEntryPrice, oraclePriceE6)
                   : (isSentinelValue(account.pnl) ? 0n : account.pnl);
-
-                // PnL percentage
                 const pnlPercent = computePnlPercent(unrealizedPnl, account.capital);
 
-                // Liquidation distance percentage
                 let liquidationDistancePct = 100;
                 if (oraclePriceE6 > 0n && liquidationPriceE6 > 0n && account.positionSize !== 0n) {
                   if (account.positionSize > 0n) {
-                    // Long: liq price is below oracle
                     liquidationDistancePct = oraclePriceE6 > liquidationPriceE6
                       ? Number(((oraclePriceE6 - liquidationPriceE6) * 10000n) / oraclePriceE6) / 100
                       : 0;
                   } else {
-                    // Short: liq price is above oracle
                     liquidationDistancePct = liquidationPriceE6 > oraclePriceE6
                       ? Number(((liquidationPriceE6 - oraclePriceE6) * 10000n) / liquidationPriceE6) / 100
                       : 0;
                   }
                 }
 
-                // Risk leverage = notional / slab account capital.
                 const absPos = account.positionSize < 0n ? -account.positionSize : account.positionSize;
                 let leverage = 0;
                 if (account.capital > 0n && oraclePriceE6 > 0n) {
-                  // notional_usd = contracts * price; leverage = notional_usd / capital
                   leverage = Number((absPos * oraclePriceE6 / 1_000_000n) * 100n / account.capital) / 100;
                 }
 
-                // Track liquidation risk
                 if (liquidationDistancePct <= 30 && account.positionSize !== 0n) {
                   riskCount++;
                 }
@@ -287,7 +330,7 @@ export function usePortfolio(): PortfolioData {
                   slabAddress: slabAddrStr,
                   symbol: null,
                   account,
-                  idx,
+                  idx: 0,
                   market,
                   effectiveEntryPrice,
                   oraclePriceE6,
@@ -298,12 +341,109 @@ export function usePortfolio(): PortfolioData {
                   leverage,
                   maintenanceMarginBps,
                 });
-                // Guard account.pnl against u64::MAX sentinel values before accumulating.
-                // Uninitialized / flat positions store u64::MAX as a sentinel — summing them
-                // raw produces septillion-dollar phantom totals (GH#1352 regression).
                 pnlSum += isSentinelValue(account.pnl) ? 0n : account.pnl;
                 depositSum += account.capital;
                 unrealizedPnlSum += unrealizedPnl;
+              }
+            } else {
+              // ── v12.x legacy path ──────────────────────────────────────────
+              const accounts = parseAllAccounts(slabData);
+
+              // Parse config and params for this market (needed for oracle price + risk params)
+              let oraclePriceE6 = 0n;
+              let maintenanceMarginBps = 500n; // default 5%
+              try {
+                const config = parseConfig(slabData);
+                // GH#1990: lastEffectivePriceE6 is the raw oracle price (pre-inversion).
+                // Apply invert flag so oraclePriceE6 is in the same domain as entryPrice
+                // (which is stored post-inversion on-chain). Without this, PnL and
+                // liquidation calculations are directionally wrong for inverted markets.
+                const rawPriceE6 = config.lastEffectivePriceE6;
+                oraclePriceE6 = sanitizePriceE6(applyInvert(rawPriceE6, config.invert));
+                const params = parseParams(slabData);
+                maintenanceMarginBps = params.maintenanceMarginBps;
+              } catch {
+                // If config parse fails, use defaults
+              }
+
+              for (const { idx, account } of accounts) {
+                if (account.kind === AccountKind.User && account.owner.toBase58() === pkStr) {
+                  // V12_1: entry_price was removed from on-chain struct. Fall back to
+                  // localStorage (saved by TradeForm at trade time) so portfolio PnL
+                  // and liq-price compute correctly instead of showing 0/—.
+                  const effectiveEntryPrice =
+                    account.entryPrice > 0n ? account.entryPrice : getEntryPrice(slabAddrStr, idx);
+
+                  // Compute liquidation price
+                  const liquidationPriceE6 = computeLiqPrice(
+                    effectiveEntryPrice,
+                    account.capital,
+                    account.positionSize,
+                    maintenanceMarginBps,
+                  );
+
+                  // Compute unrealized PnL using oracle price.
+                  // GH#1331: account.pnl can be u64::MAX sentinel for uninitialized/flat
+                  // positions. Guard it with isSentinelValue to prevent billion-dollar
+                  // phantom PnL on the dashboard when oracle price is unavailable.
+                  const unrealizedPnl = oraclePriceE6 > 0n && effectiveEntryPrice > 0n
+                    ? computeMarkPnl(account.positionSize, effectiveEntryPrice, oraclePriceE6)
+                    : (isSentinelValue(account.pnl) ? 0n : account.pnl);
+
+                  // PnL percentage
+                  const pnlPercent = computePnlPercent(unrealizedPnl, account.capital);
+
+                  // Liquidation distance percentage
+                  let liquidationDistancePct = 100;
+                  if (oraclePriceE6 > 0n && liquidationPriceE6 > 0n && account.positionSize !== 0n) {
+                    if (account.positionSize > 0n) {
+                      // Long: liq price is below oracle
+                      liquidationDistancePct = oraclePriceE6 > liquidationPriceE6
+                        ? Number(((oraclePriceE6 - liquidationPriceE6) * 10000n) / oraclePriceE6) / 100
+                        : 0;
+                    } else {
+                      // Short: liq price is above oracle
+                      liquidationDistancePct = liquidationPriceE6 > oraclePriceE6
+                        ? Number(((liquidationPriceE6 - oraclePriceE6) * 10000n) / liquidationPriceE6) / 100
+                        : 0;
+                    }
+                  }
+
+                  // Risk leverage = notional / slab account capital.
+                  const absPos = account.positionSize < 0n ? -account.positionSize : account.positionSize;
+                  let leverage = 0;
+                  if (account.capital > 0n && oraclePriceE6 > 0n) {
+                    // notional_usd = contracts * price; leverage = notional_usd / capital
+                    leverage = Number((absPos * oraclePriceE6 / 1_000_000n) * 100n / account.capital) / 100;
+                  }
+
+                  // Track liquidation risk
+                  if (liquidationDistancePct <= 30 && account.positionSize !== 0n) {
+                    riskCount++;
+                  }
+
+                  allPositions.push({
+                    slabAddress: slabAddrStr,
+                    symbol: null,
+                    account,
+                    idx,
+                    market,
+                    effectiveEntryPrice,
+                    oraclePriceE6,
+                    liquidationPriceE6,
+                    liquidationDistancePct,
+                    unrealizedPnl,
+                    pnlPercent,
+                    leverage,
+                    maintenanceMarginBps,
+                  });
+                  // Guard account.pnl against u64::MAX sentinel values before accumulating.
+                  // Uninitialized / flat positions store u64::MAX as a sentinel — summing them
+                  // raw produces septillion-dollar phantom totals (GH#1352 regression).
+                  pnlSum += isSentinelValue(account.pnl) ? 0n : account.pnl;
+                  depositSum += account.capital;
+                  unrealizedPnlSum += unrealizedPnl;
+                }
               }
             }
           } catch {

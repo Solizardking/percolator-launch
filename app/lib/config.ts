@@ -191,6 +191,14 @@ export function getConfig() {
   };
 }
 
+// v17 program placeholder IDs (declare_id! values from v16_program.rs).
+// These are NOT yet deployed; real on-chain addresses will be set at cutover (Phase 7).
+// Listed here so the known-program gate is ready for v17 cutover without a code change.
+// IMPORTANT: Do NOT add production keys here until they are audited and deployed.
+const V17_PROGRAM_ID_PLACEHOLDERS = [
+  "Perco1ator111111111111111111111111111111111",  // v17 wrapper (declare_id placeholder)
+] as const;
+
 /**
  * Get all unique program ID strings from config (default + all slab tier programs).
  * Shared utility — avoids duplicating this logic across hooks.
@@ -208,6 +216,8 @@ export function getAllProgramIds(): string[] {
   if (byTier) {
     Object.values(byTier).forEach((id) => { if (id) ids.add(id); });
   }
+  // v17 placeholder IDs — pre-listed so cutover only requires swapping deployed addresses in CONFIGS.
+  V17_PROGRAM_ID_PLACEHOLDERS.forEach((id) => ids.add(id));
   return [...ids];
 }
 

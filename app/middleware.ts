@@ -3,6 +3,9 @@ import type { NextRequest } from "next/server";
 import { Redis } from "@upstash/redis";
 import { Ratelimit } from "@upstash/ratelimit";
 import { BLOCKED_SLAB_ADDRESSES } from "@/lib/blocklist";
+import { getClientIp } from "@/lib/get-client-ip";
+import { isPlaygroundGateHost } from "@/lib/playground-hosts";
+import { NOINDEX, isAllocationVoteHost, isAllocationVoteSurface } from "@/lib/allocation-vote/host";
 
 // ── Rate limiter configuration ───────────────────────────────────────────────
 // Two tiers: RPC proxy gets a higher limit since Solana web3.js generates many calls per page load.
@@ -240,6 +243,7 @@ const REDIRECT_HOSTS = new Set([
 // here — they continue to live on mainnet.percolatorlaunch.com.
 const WAITLIST_HOST_ALLOWED_PREFIXES = [
   "/waitlist",
+  "/playground",  // waitlist gate for devnet v2 -- verifies position, grants nothing by itself
   "/admin",        // operator dashboard (waitlist leaderboard + tiers, oracle admin, bug review)
   "/r",            // referral-link landings (/r/<code>)
   "/pitch",        // investor-facing deck (still accessible, just not linked from nav)
@@ -255,6 +259,8 @@ const WAITLIST_HOST_ALLOWED_PREFIXES = [
   "/agents",
   "/leaderboard",
   "/openclaw",
+  "/allocation",   // PERC allocation checker (unpublished state); direct URL only, noindex
+  "/vote",         // PERC holder vote (disabled); direct URL only, noindex
 ];
 // Crawler-facing metadata routes (Next.js file conventions + static SEO files).
 // These have no file extension (or a non-asset one like .xml/.txt) so they'd
@@ -282,6 +288,15 @@ function isAllowedOnWaitlistHost(pathname: string): boolean {
   return false;
 }
 
+function isPlaygroundSurface(pathname: string): boolean {
+  return (
+    pathname === "/playground" ||
+    pathname.startsWith("/playground/") ||
+    pathname === "/api/playground" ||
+    pathname.startsWith("/api/playground/")
+  );
+}
+
 export async function middleware(request: NextRequest) {
   // ── Hostname routing ───────────────────────────────────────────────────────
   const host = (request.headers.get("host") ?? "").toLowerCase().split(":")[0];
@@ -293,6 +308,15 @@ export async function middleware(request: NextRequest) {
       "https://percolator.trade",
     );
     return NextResponse.redirect(target, { status: 301 });
+  }
+
+  // ── Allocation checker + holder vote exist only on percolator.trade ───────
+  // Pages AND APIs. Exact Host match (never x-forwarded-host or a substring),
+  // so mainnet.percolatorlaunch.com, previews, localhost and lookalikes 404
+  // exactly as if the routes had never been added.
+  const isAllocVote = isAllocationVoteSurface(request.nextUrl.pathname);
+  if (isAllocVote && !isAllocationVoteHost(request.headers.get("host"))) {
+    return new NextResponse("Not Found", { status: 404, headers: { "X-Robots-Tag": NOINDEX } });
   }
 
   // Waitlist host: rewrite root to /waitlist, redirect everything non-allowed to /waitlist
@@ -310,6 +334,14 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url, { status: 302 });
     }
     // Allowed path on waitlist host — fall through to existing middleware logic
+  }
+
+  // ── Playground gate surfaces exist only where the waitlist lives ──────────
+  // The mainnet app (percolator-mainnet) builds from this same branch; it must
+  // not grow a /playground page or /api/playground/* endpoints. 404 exactly as
+  // if they had never been added.
+  if (isPlaygroundSurface(request.nextUrl.pathname) && !isPlaygroundGateHost(host)) {
+    return new NextResponse("Not Found", { status: 404 });
   }
 
   // ── Mainnet beta: block pages not available yet ────────────────────────────
@@ -332,21 +364,15 @@ export async function middleware(request: NextRequest) {
   }
 
   // ── IP Blocklist check ─────────────────────────────────────────────────────
-  // Resolve client IP using the same proxy-depth logic as the rate limiter.
+  // Resolve client IP via the shared hardened helper (GH#2218) — validated,
+  // trusted-header-first, proxy-depth-aware. Same identity the rate limiter
+  // uses below.
+  // NOTE: depth=0 means "no proxy" — getClientIp returns "unknown" and
+  // _isBlocked("unknown") returns false, effectively disabling the
+  // Edge Runtime blocklist. The Hono ip-blocklist.ts middleware
+  // handles depth=0 correctly for the API server path.
   if (_blocklist.length > 0) {
-    const _proxyDepth = Math.max(0, Number(process.env.TRUSTED_PROXY_DEPTH ?? 1));
-    let _clientIp = "unknown";
-    // NOTE: depth=0 means "no proxy" — _clientIp stays "unknown" and
-    // _isBlocked("unknown") returns false, effectively disabling the
-    // Edge Runtime blocklist. The Hono ip-blocklist.ts middleware
-    // handles depth=0 correctly for the API server path.
-    if (_proxyDepth > 0) {
-      const _fwd = request.headers.get("x-forwarded-for");
-      if (_fwd) {
-        const _ips = _fwd.split(",").map((s) => s.trim());
-        _clientIp = _ips[Math.max(0, _ips.length - _proxyDepth)] ?? "unknown";
-      }
-    }
+    const _clientIp = getClientIp(request);
     if (_isBlocked(_clientIp)) {
       return new NextResponse(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
@@ -392,21 +418,14 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  // Extract client IP respecting TRUSTED_PROXY_DEPTH env var.
-  // - TRUSTED_PROXY_DEPTH=0: Ignore X-Forwarded-For (direct exposure, no proxy)
-  // - TRUSTED_PROXY_DEPTH=1: One proxy layer (Vercel, Cloudflare) — use last IP
-  // - TRUSTED_PROXY_DEPTH=2: Two proxy layers — use second-to-last IP
-  // This prevents IP spoofing attacks via forged X-Forwarded-For headers.
-  const PROXY_DEPTH = Math.max(0, Number(process.env.TRUSTED_PROXY_DEPTH ?? 1));
-  let ip = "unknown";
-  if (PROXY_DEPTH > 0) {
-    const forwarded = request.headers.get("x-forwarded-for");
-    if (forwarded) {
-      const ips = forwarded.split(",").map((s) => s.trim());
-      const idx = Math.max(0, ips.length - PROXY_DEPTH);
-      ip = ips[idx] ?? "unknown";
-    }
-  }
+  // Extract client IP via the shared hardened helper (GH#2218):
+  // trusted single-IP headers (cf-connecting-ip, x-real-ip) first, then the
+  // TRUSTED_PROXY_DEPTH-selected x-forwarded-for hop, every candidate
+  // validated as a real IPv4/IPv6 address before it becomes a rate-limit key.
+  // - TRUSTED_PROXY_DEPTH=0: no trusted proxy — ignore all forwarding headers
+  // - TRUSTED_PROXY_DEPTH=1: one proxy layer (Vercel, Cloudflare) — use last IP
+  // - TRUSTED_PROXY_DEPTH=2: two proxy layers — use second-to-last IP
+  const ip = getClientIp(request);
   const isApi = request.nextUrl.pathname.startsWith("/api/");
 
   if (isApi) {
@@ -451,6 +470,7 @@ export async function middleware(request: NextRequest) {
     response.headers.set("X-RateLimit-Remaining", String(remaining));
     response.headers.set("X-RateLimit-Reset", String(reset));
     addSecurityHeaders(response);
+    if (isAllocVote) response.headers.set("X-Robots-Tag", NOINDEX);
     return response;
   }
 
@@ -469,6 +489,7 @@ export async function middleware(request: NextRequest) {
   // A cached response would carry the old nonce in data-nonce while the middleware
   // generates a fresh nonce for the CSP header — making the nonce effectively static.
   response.headers.set("Cache-Control", "no-store, must-revalidate");
+  if (isAllocVote) response.headers.set("X-Robots-Tag", NOINDEX);
   return response;
 }
 
@@ -503,12 +524,12 @@ function addSecurityHeaders(response: NextResponse, nonce?: string) {
     // challenges.cloudflare.com is appended for the Turnstile widget's
     // XHR back-channel (telemetry + challenge-state checks). Same
     // origin as the script load.
-    "connect-src 'self' https://*.solana.com wss://*.solana.com https://*.supabase.co wss://*.supabase.co https://*.vercel-insights.com https://api.coingecko.com https://api.geckoterminal.com https://*.helius-rpc.com wss://*.helius-rpc.com https://api.dexscreener.com https://hermes.pyth.network https://*.up.railway.app wss://*.up.railway.app https://api.percolatorlaunch.com wss://api.percolatorlaunch.com https://lite.jup.ag https://token.jup.ag https://tokens.jup.ag https://auth.privy.io https://embedded-wallets.privy.io https://*.privy.systems https://*.rpc.privy.systems https://explorer-api.walletconnect.com wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://challenges.cloudflare.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://cloudflareinsights.com blob:",
+    "connect-src 'self' https://privy.percolator.trade wss://privy.percolator.trade https://*.solana.com wss://*.solana.com https://*.supabase.co wss://*.supabase.co https://*.vercel-insights.com https://api.coingecko.com https://api.geckoterminal.com https://*.helius-rpc.com wss://*.helius-rpc.com https://api.dexscreener.com https://hermes.pyth.network https://*.up.railway.app wss://*.up.railway.app https://api.percolatorlaunch.com wss://api.percolatorlaunch.com https://lite.jup.ag https://token.jup.ag https://tokens.jup.ag https://auth.privy.io https://embedded-wallets.privy.io https://*.privy.systems https://*.rpc.privy.systems https://explorer-api.walletconnect.com wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://challenges.cloudflare.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://cloudflareinsights.com blob:",
     // Removed https://*.vercel.app wildcard (issue #635) — no legitimate use case for embedding
     // arbitrary Vercel-hosted content in iframes. frame-src controls outbound iframe embedding.
     // challenges.cloudflare.com is the iframe origin the Turnstile widget
     // renders into — distinct from the api.js script-src entry above.
-    "frame-src 'self' https://auth.privy.io https://embedded-wallets.privy.io https://*.privy.systems https://phantom.app https://solflare.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com",
+    "frame-src 'self' https://privy.percolator.trade https://auth.privy.io https://embedded-wallets.privy.io https://*.privy.systems https://phantom.app https://solflare.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com",
     // Removed https://*.vercel.app wildcard (issue #632) — any Vercel project could embed the app,
     // creating a clickjacking surface over wallet/sign flows. Keep only the specific preview URL.
     "frame-ancestors 'self' https://percolatorlaunch.com https://*.percolatorlaunch.com https://percolator-launch.vercel.app",

@@ -571,8 +571,9 @@ function Slide05Product(_: SlideProps) {
             <div className="pflow-step-title">Traders get the leverage</div>
             <div className="pflow-step-desc">
               One cross-margin USDC account, with leverage set per
-              market by its risk profile, on tokens no other venue
-              lists. Positions mint as transferable Token-2022 NFTs.
+              market by its risk profile, including tokens no other
+              venue lists. Positions mint as transferable Token-2022
+              NFTs.
             </div>
             <div className="pflow-example-card pflow-example-card-live">
               <div className="pflow-example-label mono">fees on every trade</div>
@@ -855,7 +856,7 @@ function SlideGTM(_: SlideProps) {
         <div className="pitch-label">Go-to-Market</div>
         <h2 className="pitch-title">
           Creators acquire markets. LP vaults provide depth.
-          Traders never trade against each other.
+          Traders face the vault, not an order book.
         </h2>
 
         <div className="pitch-solution-stack">
@@ -1032,7 +1033,7 @@ function SlideOrigin(_: SlideProps) {
           >
             aeyakovenko/percolator-prog
           </a>
-          . He works on the engine and nothing else; everything around
+          . His part is the engine and nothing else; everything around
           it is left for whoever shows up to build.
         </p>
 
@@ -1059,33 +1060,16 @@ function SlideOrigin(_: SlideProps) {
             href="https://x.com/toly"
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="Toly tweet — David's KeeperCrank fix, April 29"
+            aria-label="Toly tweet — Percolator is a job creator, Feb 13"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/images/toly/photo1.jpg"
-              alt="Toly tweet quote-RTing David's GitHub issue: 'big brain bug'"
+              src="/images/toly/photo4.jpg"
+              alt="Toly tweet: 'Percolator is a job creator'"
             />
             <div className="pitch-toly-photo-cap mono">
-              <span>@toly · Apr 29</span>
-              <span>David&apos;s KeeperCrank fix</span>
-            </div>
-          </a>
-          <a
-            className="pitch-toly-photo"
-            href="https://x.com/toly"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Toly tweet — Khubair bounty 3 critical, May 7"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/images/toly/photo2.jpg"
-              alt="Toly tweet with brain emojis on Khubair's bounty 3 critical issue"
-            />
-            <div className="pitch-toly-photo-cap mono">
-              <span>@toly · May 7</span>
-              <span>Khubair&apos;s bounty 3 critical</span>
+              <span>@toly · Feb 13</span>
+              <span>&ldquo;Percolator is a job creator&rdquo;</span>
             </div>
           </a>
           <a
@@ -1110,16 +1094,16 @@ function SlideOrigin(_: SlideProps) {
             href="https://x.com/toly"
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="Toly tweet — Percolator is a job creator, Feb 13"
+            aria-label="Toly tweet — David's KeeperCrank fix, April 29"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/images/toly/photo4.jpg"
-              alt="Toly tweet: 'Percolator is a job creator'"
+              src="/images/toly/photo1.jpg"
+              alt="Toly tweet quote-RTing David's GitHub issue: 'big brain bug'"
             />
             <div className="pitch-toly-photo-cap mono">
-              <span>@toly · Feb 13</span>
-              <span>&ldquo;Percolator is a job creator&rdquo;</span>
+              <span>@toly · Apr 29</span>
+              <span>David&apos;s KeeperCrank fix</span>
             </div>
           </a>
           <a
@@ -1127,16 +1111,16 @@ function SlideOrigin(_: SlideProps) {
             href="https://x.com/toly"
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="Toly tweet — Percolator build update, Jun 1"
+            aria-label="Toly tweet — Khubair's critical bug find, May 7"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/images/toly/photo5.png"
-              alt="Toly tweet with boat emojis quote-RTing Percolator's '1/12: Build update' thread"
+              src="/images/toly/photo2.jpg"
+              alt="Toly tweet with brain emojis on Khubair's critical bug find"
             />
             <div className="pitch-toly-photo-cap mono">
-              <span>@toly · Jun 1</span>
-              <span>Build-update QT</span>
+              <span>@toly · May 7</span>
+              <span>Khubair&apos;s critical bug find</span>
             </div>
           </a>
           <a
@@ -1188,6 +1172,23 @@ function SlideOrigin(_: SlideProps) {
             <div className="pitch-toly-photo-cap mono">
               <span>@toly · May 29</span>
               <span>&ldquo;Two devs and a dream&rdquo;</span>
+            </div>
+          </a>
+          <a
+            className="pitch-toly-photo"
+            href="https://x.com/toly"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Toly tweet — Percolator build update, Jun 1"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/toly/photo5.png"
+              alt="Toly tweet with boat emojis quote-RTing Percolator's '1/12: Build update' thread"
+            />
+            <div className="pitch-toly-photo-cap mono">
+              <span>@toly · Jun 1</span>
+              <span>On our build update</span>
             </div>
           </a>
         </div>
