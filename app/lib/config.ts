@@ -77,25 +77,18 @@ export function getRpcEndpoint(): string {
 
 /**
  * Get WebSocket endpoint for Solana Connection subscriptions.
- * The HTTP proxy at /api/rpc doesn't support WebSocket upgrades,
- * so we connect directly to Helius WSS for real-time subscriptions.
- * Always returns a valid WSS URL — Helius if configured, public Solana RPC otherwise.
+ * The HTTP proxy at /api/rpc doesn't support WebSocket upgrades, and no
+ * Helius API key is ever used client-side: HELIUS_API_KEY is server-only
+ * (HTTP traffic goes through the /api/rpc proxy). Anything placed in a
+ * NEXT_PUBLIC_* variable is inlined into the client bundle at build time,
+ * so WebSocket subscriptions use the public Solana WS endpoints.
+ * Always returns a valid WSS URL.
  */
 export function getWsEndpoint(): string {
-  // PERC-469: Use only the dedicated WS key (safe to expose: WS-only, rate-limited).
-  // NEXT_PUBLIC_HELIUS_API_KEY has been removed; HELIUS_API_KEY is server-only and
-  // unavailable on the client, so we cannot use it here.
-  const apiKey = (process.env.NEXT_PUBLIC_HELIUS_WS_API_KEY ?? "").trim();
   const net = getNetwork();
 
-  if (apiKey) {
-    return net === "mainnet"
-      ? `wss://mainnet.helius-rpc.com/?api-key=${apiKey}`
-      : `wss://devnet.helius-rpc.com/?api-key=${apiKey}`;
-  }
-
-  // No dedicated WS key — fall back to public Solana WS endpoints.
-  // Rate-limited but functional for real-time subscriptions.
+  // Public Solana WS endpoints — rate-limited but functional for real-time
+  // subscriptions, and they keep every API key server-side.
   // We MUST return a valid WSS URL (not undefined) because @solana/web3.js
   // auto-derives wss:// from the HTTP endpoint when wsEndpoint is falsy,
   // and on the client the HTTP endpoint is /api/rpc (a proxy that doesn't

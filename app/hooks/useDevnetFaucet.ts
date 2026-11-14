@@ -65,13 +65,10 @@ const USDC_THRESHOLD = 1_000_000_000n; // 1,000 USDC (6 decimals) — PERC-808
 const DISMISSED_KEY = "percolator:faucet-dismissed";
 
 /**
- * PERC-808: Helius devnet faucet for SOL airdrop (more reliable than Solana's).
- * Falls back to Solana devnet faucet if Helius is unavailable.
+ * SOL airdrops use the public Solana devnet faucet. Client code never holds
+ * a Helius API key (keys are server-only, behind the /api/rpc proxy), so no
+ * keyed RPC endpoint is constructed here.
  */
-const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_API_KEY ?? "";
-const HELIUS_DEVNET_RPC = HELIUS_API_KEY
-  ? `https://devnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
-  : "";
 
 export function useDevnetFaucet(): DevnetFaucetState {
   const { publicKey, connected } = useWalletCompat();
@@ -183,44 +180,20 @@ export function useDevnetFaucet(): DevnetFaucetState {
     setLoading(true);
     setError(null);
     try {
-      // PERC-808: Try Helius devnet faucet first (more reliable, higher limits)
-      let sig: string | null = null;
-      if (HELIUS_DEVNET_RPC) {
-        try {
-          const heliusConn = new Connection(HELIUS_DEVNET_RPC, "confirmed");
-          sig = await heliusConn.requestAirdrop(publicKey, 2 * LAMPORTS_PER_SOL);
-          // Confirm via Helius
-          const start = Date.now();
-          while (Date.now() - start < 60_000) {
-            const { value } = await heliusConn.getSignatureStatuses([sig]);
-            const s = value?.[0];
-            if (s?.confirmationStatus === "confirmed" || s?.confirmationStatus === "finalized") {
-              if (s.err) throw new Error("SOL airdrop transaction failed");
-              break;
-            }
-            await new Promise((r) => setTimeout(r, 2000));
-          }
-        } catch {
-          sig = null; // Fall through to Solana faucet
+      // Solana devnet faucet (public RPC — no API key client-side)
+      const sig = await airdropConnection.current.requestAirdrop(
+        publicKey,
+        2 * LAMPORTS_PER_SOL,
+      );
+      const start = Date.now();
+      while (Date.now() - start < 60_000) {
+        const { value } = await airdropConnection.current.getSignatureStatuses([sig]);
+        const s = value?.[0];
+        if (s?.confirmationStatus === "confirmed" || s?.confirmationStatus === "finalized") {
+          if (s.err) throw new Error("SOL airdrop transaction failed");
+          break;
         }
-      }
-
-      // Fallback: Solana devnet faucet
-      if (!sig) {
-        sig = await airdropConnection.current.requestAirdrop(
-          publicKey,
-          2 * LAMPORTS_PER_SOL,
-        );
-        const start = Date.now();
-        while (Date.now() - start < 60_000) {
-          const { value } = await airdropConnection.current.getSignatureStatuses([sig]);
-          const s = value?.[0];
-          if (s?.confirmationStatus === "confirmed" || s?.confirmationStatus === "finalized") {
-            if (s.err) throw new Error("SOL airdrop transaction failed");
-            break;
-          }
-          await new Promise((r) => setTimeout(r, 2000));
-        }
+        await new Promise((r) => setTimeout(r, 2000));
       }
 
       setSolDone(true);

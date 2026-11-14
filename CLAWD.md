@@ -417,8 +417,8 @@ TX6 StakePool:      https://solscan.io/tx/...?cluster=devnet
 
 ```bash
 # .env — Devnet Configuration
-RPC_URL=https://devnet.helius-rpc.com/?api-key=f1598ee2-cd64-4bad-881d-fce6e386665c
-HELIUS_API_KEY=f1598ee2-cd64-4bad-881d-fce6e386665c
+RPC_URL=https://devnet.helius-rpc.com/?api-key=<your-helius-api-key>
+HELIUS_API_KEY=<your-helius-api-key>
 NETWORK=devnet
 PROGRAM_ID=FwfBKZXbYr4vTK23bMFkbgKq3npJ3MSDxEaKmq9Aj4Qn
 ALL_PROGRAM_IDS=FxfD37s1AZTeWfFQps9Zpebi2dNQ9QSSDtfMKdbsfKrD,FwfBKZXbYr4vTK23bMFkbgKq3npJ3MSDxEaKmq9Aj4Qn,g9msRSV3RFRFSqMeyjmiSAHfKcLFqYSWB7YXZBhNb2V

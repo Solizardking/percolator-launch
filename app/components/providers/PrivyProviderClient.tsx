@@ -38,16 +38,12 @@ const PrivyProviderClient: FC<{ appId: string; children: ReactNode }> = ({
     const mainnetRpcUrl = `${origin}/api/rpc?network=mainnet`;
     const devnetRpcUrl = `${origin}/api/rpc?network=devnet`;
 
-    // WSS endpoint for subscriptions — Privy needs a real WebSocket URL; we use a
-    // dedicated WS-only key (NEXT_PUBLIC_HELIUS_WS_API_KEY, intentionally limited-scope
-    // and safe to expose) or fall back to public Solana endpoints.
-    const wsKey = (process.env.NEXT_PUBLIC_HELIUS_WS_API_KEY ?? "").trim();
-    const mainnetWss = wsKey
-      ? `wss://mainnet.helius-rpc.com/?api-key=${wsKey}`
-      : "wss://api.mainnet-beta.solana.com";
-    const devnetWss = wsKey
-      ? `wss://devnet.helius-rpc.com/?api-key=${wsKey}`
-      : "wss://api.devnet.solana.com";
+    // WSS endpoint for subscriptions — Privy needs a real WebSocket URL.
+    // No Helius API key is exposed client-side (keys are server-only, behind
+    // the /api/rpc proxy above), so subscriptions use the public Solana WS
+    // endpoints.
+    const mainnetWss = "wss://api.mainnet-beta.solana.com";
+    const devnetWss = "wss://api.devnet.solana.com";
 
     return {
       "solana:mainnet": {

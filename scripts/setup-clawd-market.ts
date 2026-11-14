@@ -156,7 +156,12 @@ function parseArgs(): SetupConfig {
     return idx !== -1 ? argv[idx + 1] : undefined;
   };
 
-  const rpcUrl = get("--rpc") ?? process.env.RPC_URL ?? "https://devnet.helius-rpc.com/?api-key=f1598ee2-cd64-4bad-881d-fce6e386665c";
+  const rpcUrl =
+    get("--rpc") ??
+    process.env.RPC_URL ??
+    (process.env.HELIUS_API_KEY
+      ? `https://devnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`
+      : "https://api.devnet.solana.com");
 
   const keypairPath = get("--keypair") ?? process.env.KEYPAIR_PATH ?? path.join(
     process.env.HOME!,

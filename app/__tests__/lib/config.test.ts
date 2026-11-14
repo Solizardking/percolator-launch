@@ -163,18 +163,20 @@ describe("getWsEndpoint", () => {
     clearWindow();
   });
 
-  it("uses NEXT_PUBLIC_HELIUS_WS_API_KEY for devnet", () => {
+  it("ignores NEXT_PUBLIC_HELIUS_WS_API_KEY for devnet (keys are server-only)", () => {
+    // No Helius key may reach the client bundle: NEXT_PUBLIC_* vars are
+    // inlined at build time, so getWsEndpoint must never build a keyed URL.
     clearWindow();
     process.env.NEXT_PUBLIC_DEFAULT_NETWORK = "devnet";
     process.env.NEXT_PUBLIC_HELIUS_WS_API_KEY = "ws-key";
-    expect(getWsEndpoint()).toBe("wss://devnet.helius-rpc.com/?api-key=ws-key");
+    expect(getWsEndpoint()).toBe("wss://api.devnet.solana.com");
   });
 
-  it("uses NEXT_PUBLIC_HELIUS_WS_API_KEY for mainnet", () => {
+  it("ignores NEXT_PUBLIC_HELIUS_WS_API_KEY for mainnet (keys are server-only)", () => {
     clearWindow();
     process.env.NEXT_PUBLIC_DEFAULT_NETWORK = "mainnet";
     process.env.NEXT_PUBLIC_HELIUS_WS_API_KEY = "ws-key";
-    expect(getWsEndpoint()).toBe("wss://mainnet.helius-rpc.com/?api-key=ws-key");
+    expect(getWsEndpoint()).toBe("wss://api.mainnet-beta.solana.com");
   });
 
   it("falls back to public Solana WS when NEXT_PUBLIC_HELIUS_WS_API_KEY is not set (PERC-469)", () => {
