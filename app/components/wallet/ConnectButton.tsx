@@ -146,7 +146,7 @@ const ConnectButtonInner: FC = () => {
               navigator.clipboard.writeText(activeWallet?.address ?? "");
               setMenuOpen(false);
             }}
-            className="w-full px-3 py-1.5 text-left text-[13px] text-[var(--text-secondary)] hover:bg-[var(--accent)]/[0.06] rounded-sm transition-colors disabled:opacity-40"
+            className="w-full px-3 py-1.5 text-left text-[13px] text-[var(--text-secondary)] hover:bg-[var(--accent)]/[0.06] rounded-sm transition-colors"
           >
             Copy address
           </button>
