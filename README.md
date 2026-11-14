@@ -478,7 +478,7 @@ All backend services share a single `.env` file (root or per-package). Copy `.en
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Service role key (server-side only) |
 | `NEXT_PUBLIC_API_URL` | No | Backend API base URL |
-| `NEXT_PUBLIC_WS_URL` | No | WebSocket URL for live prices |
+| `NEXT_PUBLIC_WS_URL` | No | WebSocket URL for live prices — set to `wss://ws.percolator.tech/ws` (percolator-ws live price feed) |
 | `NEXT_PUBLIC_RPC_URL` | No | Solana RPC endpoint |
 | `NEXT_PUBLIC_NETWORK` | No | `devnet` or `mainnet-beta` |
 
@@ -489,6 +489,8 @@ All backend services share a single `.env` file (root or per-package). Copy `.en
 ### Frontend — Vercel
 
 Auto-deploys from `main` via Vercel. Set env vars in the Vercel dashboard. Production: https://percolatorlaunch.com
+
+**Live price feed:** set `NEXT_PUBLIC_WS_URL=wss://ws.percolator.tech/ws` in the Vercel dashboard (Production + Preview). `useLivePrice` then subscribes by slab address to percolator-ws and consumes its `price.updated` messages; without it, the hook derives the socket from `NEXT_PUBLIC_API_URL` (the launch backend), which does not emit the percolator-ws feed format.
 
 ### Backend — Railway
 
