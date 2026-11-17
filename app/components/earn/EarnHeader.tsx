@@ -50,14 +50,23 @@ export function EarnHeader({ stats, loading }: EarnHeaderProps) {
             loading={loading}
             tooltip="Estimated from the last 30 days of insurance fund fee revenue. Past performance does not guarantee future returns."
           >
-            <span className="text-lg font-semibold text-[var(--cyan)]">
-              <AnimatedNumber
-                value={stats.avgApyPct}
-                suffix="%"
-                decimals={1}
-                className="text-lg font-semibold text-[var(--cyan)]"
-              />
-            </span>
+            {stats.avgApyAvailable ? (
+              <span className="text-lg font-semibold text-[var(--cyan)]">
+                <AnimatedNumber
+                  value={stats.avgApyPct}
+                  suffix="%"
+                  decimals={1}
+                  className="text-lg font-semibold text-[var(--cyan)]"
+                />
+              </span>
+            ) : (
+              <span
+                className="text-lg font-semibold text-[var(--text-secondary)]"
+                title="APY is not available until vaults hold deposits and generate fees"
+              >
+                —
+              </span>
+            )}
           </StatCell>
           <StatCell
             label="Daily Fee Revenue"

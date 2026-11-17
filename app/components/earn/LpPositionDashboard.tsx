@@ -13,8 +13,8 @@ interface LpPositionDashboardProps {
   decimals: number;
   /** Collateral symbol */
   collateralSymbol: string;
-  /** Estimated APY % */
-  estimatedApyPct: number;
+  /** Estimated APY % (null = not available from live stats) */
+  estimatedApyPct: number | null;
   /** Redemption rate (e6) */
   redemptionRateE6: bigint;
   /** Loading */
@@ -132,7 +132,7 @@ export function LpPositionDashboard({
               />
               <MetricCell
                 label="Est. APY"
-                value={`${estimatedApyPct.toFixed(1)}%`}
+                value={estimatedApyPct !== null ? `${estimatedApyPct.toFixed(1)}%` : '—'}
                 highlight
                 color="var(--cyan)"
                 tooltip="Estimated from the last 30 days of insurance fund fee revenue. Past performance does not guarantee future returns."

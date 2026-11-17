@@ -36,6 +36,12 @@ interface DepositWithdrawPanelProps {
   onDeposit: (amount: bigint) => Promise<void>;
   /** Withdraw callback */
   onWithdraw: (lpAmount: bigint) => Promise<void>;
+  /**
+   * Whether the on-chain stake pool exists for this market.
+   * When false, submit is disabled with a truthful label — deposits and
+   * withdrawals cannot execute until the pool is initialized on-chain.
+   */
+  poolExists?: boolean;
 }
 
 export function DepositWithdrawPanel({
@@ -50,6 +56,7 @@ export function DepositWithdrawPanel({
   cooldownSlots,
   onDeposit,
   onWithdraw,
+  poolExists = true,
 }: DepositWithdrawPanelProps) {
   const { connected } = useWalletCompat();
   const [tab, setTab] = useState<Tab>('deposit');
@@ -361,18 +368,20 @@ export function DepositWithdrawPanel({
           )}
           <GlowButton
             onClick={handleSubmit}
-            disabled={!isValid || submitting || loading}
+            disabled={!poolExists || !isValid || submitting || loading}
             variant="primary"
             size="lg"
             className="flex-1"
           >
-            {submitting
-              ? 'Confirming...'
-              : tab === 'deposit'
-                ? 'Deposit'
-                : withdrawConfirming
-                  ? 'Confirm Withdrawal'
-                  : 'Withdraw'}
+            {!poolExists
+              ? 'Vault Not Initialized'
+              : submitting
+                ? 'Confirming...'
+                : tab === 'deposit'
+                  ? 'Deposit'
+                  : withdrawConfirming
+                    ? 'Confirm Withdrawal'
+                    : 'Withdraw'}
           </GlowButton>
         </div>
       </div>

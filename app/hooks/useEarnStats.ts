@@ -53,6 +53,12 @@ export interface EarnStats {
   markets: MarketVaultInfo[];
   /** Total 24h fee revenue estimate (USD) */
   dailyFeeRevenue: number;
+  /**
+   * Whether avgApyPct is computed from real vault/fee data.
+   * False when there are no markets with actual deposits — the UI must
+   * render "not available" instead of a numeric APY in that case.
+   */
+  avgApyAvailable: boolean;
 }
 
 const DEFAULT_STATS: EarnStats = {
@@ -64,10 +70,13 @@ const DEFAULT_STATS: EarnStats = {
   totalInsurance: 0,
   markets: [],
   dailyFeeRevenue: 0,
+  avgApyAvailable: false,
 };
 
 // ═══════════════════════════════════════════════════════════════
-// Mock data for devnet / offline
+// Mock data — EXPLICIT MOCK MODE ONLY (isMockMode: env flag or ?mock=1,
+// both covered by the site-wide mock banner). Never used as a fallback
+// for missing/erroring live data.
 // ═══════════════════════════════════════════════════════════════
 
 function generateMockStats(): EarnStats {
@@ -153,6 +162,7 @@ function generateMockStats(): EarnStats {
     totalInsurance: totalInsurance * 150,
     markets,
     dailyFeeRevenue,
+    avgApyAvailable: true, // mock mode only — the global mock banner labels these figures
   };
 }
 
@@ -178,8 +188,11 @@ export function useEarnStats() {
       try {
         supabase = getSupabase();
       } catch {
-        // No Supabase — use mock data
-        setStats(generateMockStats());
+        // No Supabase configured — show the true empty state, never mock
+        // figures presented as live. Mock data is only for explicit mock
+        // mode (isMockMode), which is banner-labeled site-wide.
+        setError('Live vault stats unavailable — database not configured');
+        setStats(DEFAULT_STATS);
         setLoading(false);
         return;
       }
@@ -193,8 +206,11 @@ export function useEarnStats() {
       }
 
       if (!data || data.length === 0) {
-        // No markets — show mock
-        setStats(generateMockStats());
+        // No markets in the stats view — render the true zero/empty state.
+        // (Previously this silently substituted mock stats, which made an
+        // empty devnet deployment display invented TVL/APY/insurance.)
+        setStats(DEFAULT_STATS);
+        setError(null);
         setLoading(false);
         return;
       }
@@ -296,12 +312,15 @@ export function useEarnStats() {
         totalInsurance,
         markets,
         dailyFeeRevenue,
+        // APY is only meaningful when at least one vault actually holds
+        // deposits; with zero TVL the estimate is undefined, not 0%.
+        avgApyAvailable: markets.some((m) => m.vaultBalance > 0),
       });
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load earn stats');
-      // Fall back to mock data on error
-      setStats(generateMockStats());
+      // On error show the true empty state — never mock figures as live.
+      setStats(DEFAULT_STATS);
     } finally {
       setLoading(false);
     }

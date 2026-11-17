@@ -200,7 +200,7 @@ function VaultDetailInner({ slabAddress }: { slabAddress: string }) {
                 Est. APY
               </div>
               <div className="text-2xl font-bold text-[var(--cyan)] font-mono tabular-nums">
-                {estimatedApy.toFixed(1)}%
+                {marketInfo ? `${estimatedApy.toFixed(1)}%` : '—'}
               </div>
             </div>
             <div className="text-right">
@@ -265,7 +265,7 @@ function VaultDetailInner({ slabAddress }: { slabAddress: string }) {
               vaultBalance={poolState.vaultBalance}
               decimals={collateralDecimals}
               collateralSymbol={collateralSymbol}
-              estimatedApyPct={estimatedApy}
+              estimatedApyPct={marketInfo ? estimatedApy : null}
               redemptionRateE6={poolState.redemptionRateE6}
               loading={loading}
             />
@@ -285,6 +285,7 @@ function VaultDetailInner({ slabAddress }: { slabAddress: string }) {
               cooldownSlots={poolState.cooldownSlots}
               onDeposit={handleDeposit}
               onWithdraw={handleWithdraw}
+              poolExists={poolState.poolExists}
             />
           </ScrollReveal>
         </div>
