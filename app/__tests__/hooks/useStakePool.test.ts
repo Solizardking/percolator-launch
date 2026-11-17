@@ -252,4 +252,84 @@ describe('useStakePool', () => {
     expect(result.current.pdas?.poolPda.equals(mockPool)).toBe(true);
     expect(result.current.pdas?.vaultAuthPda.equals(mockVaultAuth)).toBe(true);
   });
+
+  it('falls back to the server pools directory when the RPC cannot see the pool', async () => {
+    // Regression (live bug): the browser RPC path failed in production
+    // (the /api/rpc proxy rejected the site's own origin), the hook
+    // swallowed it, and initialized pools rendered as "Not Initialized".
+    // The server route reads the same accounts on-chain, so its record
+    // must win over an RPC miss.
+    mockConnection.getAccountInfo.mockImplementation(async (pubkey: PublicKey) => {
+      if (pubkey.equals(mockPool)) return null;
+      return { data: Buffer.alloc(165), owner: PublicKey.default };
+    });
+
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        pools: [
+          {
+            poolAddress: mockPool.toBase58(),
+            slabAddress: mockSlabAddress,
+            lpMint: mockLpMint.toBase58(),
+            vault: mockVault.toBase58(),
+            tvlRaw: '5000000',
+            totalLpSupply: 10_000_000,
+            cooldownSlots: 300,
+            capTotalRaw: '0',
+          },
+        ],
+      }),
+    }) as unknown as typeof fetch;
+
+    try {
+      const { result } = renderHook(() => useStakePool());
+
+      await waitFor(() => {
+        expect(result.current.state.poolExists).toBe(true);
+      });
+
+      expect(result.current.state.poolAddress?.equals(mockPool)).toBe(true);
+      expect(result.current.state.lpMintAddress?.equals(mockLpMint)).toBe(true);
+      expect(result.current.state.vaultBalance).toBe(5_000_000n);
+      expect(result.current.state.lpSupply).toBe(10_000_000n);
+      expect(result.current.state.redemptionRateE6).toBe(500_000n);
+      expect(result.current.state.cooldownSlots).toBe(300n);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('still reports not-initialized when neither RPC nor server has the pool', async () => {
+    mockConnection.getAccountInfo.mockImplementation(async (pubkey: PublicKey) => {
+      if (pubkey.equals(mockPool)) return null;
+      return { data: Buffer.alloc(165), owner: PublicKey.default };
+    });
+
+    // A different slab than the fallback test above: the hook caches the
+    // server directory briefly at module level, and this slab is absent
+    // from any cached or freshly-fetched directory either way.
+    const otherSlab = Keypair.generate().publicKey.toBase58();
+    vi.mocked(useParams).mockReturnValue({ slab: otherSlab });
+
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ pools: [] }),
+    }) as unknown as typeof fetch;
+
+    try {
+      const { result } = renderHook(() => useStakePool());
+
+      // The not-initialized path still publishes the derived pool PDA —
+      // its appearance proves refresh + fallback both completed.
+      await waitFor(() => {
+        expect(result.current.state.poolAddress?.equals(mockPool)).toBe(true);
+      });
+      expect(result.current.state.poolExists).toBe(false);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
 });

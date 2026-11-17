@@ -123,6 +123,42 @@ describe("createBatchRpc", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("fails fast on a permanent 403 without retrying", async () => {
+    // Regression: the /api/rpc proxy's origin guard returns 403 with a
+    // JSON-RPC error body. Retrying it 5× with backoff turned every
+    // browser RPC read into a minute-long hang (market discovery never
+    // settled, /markets sat on skeletons). A 4xx must resolve
+    // immediately with the proxy's error surfaced.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      headers: new Headers({ "Content-Type": "application/json" }),
+      text: async () =>
+        JSON.stringify({
+          jsonrpc: "2.0",
+          error: { code: -32600, message: "Forbidden" },
+          id: null,
+        }),
+    });
+    globalThis.fetch = fetchMock;
+
+    const { enqueue } = createBatchRpc({
+      endpoint: "http://localhost/api/rpc",
+      batchWindowMs: 10,
+      initialBackoffMs: 100,
+      maxRetries: 5,
+    });
+
+    const p = enqueue("getAccountInfo", ["someAddress"]);
+    await vi.advanceTimersByTimeAsync(20);
+
+    const result = JSON.parse(await p);
+    expect(result.error.message).toBe("Forbidden");
+    expect(result.id).toBe(1);
+    // Exactly one HTTP attempt — no retries on a permanent rejection
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("retries with exponential backoff on 429", async () => {
     let callCount = 0;
     const fetchMock = vi.fn().mockImplementation(async () => {

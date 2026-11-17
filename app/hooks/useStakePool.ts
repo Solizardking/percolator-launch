@@ -114,6 +114,80 @@ function parseDepositPdaAccount(data: Buffer) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Server pools fallback
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Shape of one entry in GET /api/stake/pools (only the fields this hook
+ * consumes). The route reads the pools directly on-chain server-side, so
+ * a record here is chain truth — the same data the /earn list renders.
+ */
+interface ServerPoolRecord {
+  poolAddress: string;
+  slabAddress: string;
+  lpMint: string;
+  /** Vault balance in raw token units (stringified bigint) */
+  tvlRaw: string;
+  /** Total LP supply in raw units (JSON number; exact for values < 2^53) */
+  totalLpSupply: number;
+  cooldownSlots: number;
+  /** Deposit cap in raw units, stringified (0 = uncapped) */
+  capTotalRaw: string;
+}
+
+const SERVER_POOLS_TTL_MS = 15_000;
+let serverPoolsCache: {
+  fetchedAt: number;
+  bySlab: Map<string, ServerPoolRecord>;
+} | null = null;
+let serverPoolsInflight: Promise<Map<string, ServerPoolRecord>> | null = null;
+
+/**
+ * Fetch the server-side pools directory, shared across hook instances
+ * and cached briefly. Any failure resolves to an empty map — callers
+ * treat "no record" as "fall through to the RPC verdict", never as
+ * proof a pool does not exist.
+ */
+async function fetchServerPoolsBySlab(): Promise<Map<string, ServerPoolRecord>> {
+  const now = Date.now();
+  if (
+    serverPoolsCache &&
+    now - serverPoolsCache.fetchedAt < SERVER_POOLS_TTL_MS
+  ) {
+    return serverPoolsCache.bySlab;
+  }
+  if (serverPoolsInflight) return serverPoolsInflight;
+
+  serverPoolsInflight = (async () => {
+    const empty = new Map<string, ServerPoolRecord>();
+    try {
+      if (typeof fetch !== "function") return empty;
+      const res = await fetch("/api/stake/pools", {
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) return empty;
+      const body: unknown = await res.json();
+      const pools = (body as { pools?: unknown })?.pools;
+      if (!Array.isArray(pools)) return empty;
+      const bySlab = new Map<string, ServerPoolRecord>();
+      for (const p of pools) {
+        const rec = p as ServerPoolRecord;
+        if (rec && typeof rec.slabAddress === "string") {
+          bySlab.set(rec.slabAddress, rec);
+        }
+      }
+      serverPoolsCache = { fetchedAt: Date.now(), bySlab };
+      return bySlab;
+    } catch {
+      return empty;
+    } finally {
+      serverPoolsInflight = null;
+    }
+  })();
+  return serverPoolsInflight;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Hook
 // ═══════════════════════════════════════════════════════════════
 
@@ -155,6 +229,58 @@ export function useStakePool() {
     }
   }, [slabAddress, walletPubkeyStr]);
 
+  /**
+   * Fallback for when the browser RPC path cannot see the pool (proxy
+   * rejection, endpoint outage): the server's /api/stake/pools route
+   * reads the same accounts on-chain, so its record is authoritative
+   * for pool-level state. Without this, any RPC failure was swallowed
+   * into poolExists=false and the vault page claimed initialized pools
+   * were "Not Initialized". User-specific balances still come from the
+   * RPC path; when it is down they read 0 here, which is the truth the
+   * UI can act on (the deposit action itself needs the RPC anyway).
+   * Returns true when a server record was applied.
+   */
+  const applyServerPoolFallback = useCallback(async (): Promise<boolean> => {
+    if (!slabAddress || !pdas) return false;
+    try {
+      const bySlab = await fetchServerPoolsBySlab();
+      const rec = bySlab.get(slabAddress);
+      if (!rec) return false;
+
+      let vaultBalance = 0n;
+      let depositCap = 0n;
+      try { vaultBalance = BigInt(rec.tvlRaw || "0"); } catch { /* keep 0 */ }
+      try { depositCap = BigInt(rec.capTotalRaw || "0"); } catch { /* keep 0 */ }
+      const lpSupply = BigInt(Math.max(0, Math.trunc(rec.totalLpSupply || 0)));
+      const redemptionRateE6 = lpSupply > 0n
+        ? (vaultBalance * 1_000_000n) / lpSupply
+        : 1_000_000n;
+
+      let lpMintAddress: PublicKey | null = null;
+      let poolAddress: PublicKey | null = pdas.poolPda;
+      try { lpMintAddress = new PublicKey(rec.lpMint); } catch { /* keep null */ }
+      try { poolAddress = new PublicKey(rec.poolAddress); } catch { /* keep derived */ }
+
+      setState({
+        ...DEFAULT_STATE,
+        poolExists: true,
+        poolAddress,
+        vaultAuthAddress: pdas.vaultAuthPda,
+        depositPdaAddress: pdas.depositPda,
+        lpMintAddress,
+        vaultBalance,
+        lpSupply,
+        redemptionRateE6,
+        cooldownSlots: BigInt(Math.max(0, Math.trunc(rec.cooldownSlots || 0))),
+        depositCap,
+        cooldownElapsed: true,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [slabAddress, pdas]);
+
   const refreshState = useCallback(async () => {
     if (!pdas || !connection) return;
 
@@ -162,6 +288,7 @@ export function useStakePool() {
       // Fetch pool account
       const poolInfo = await connection.getAccountInfo(pdas.poolPda);
       if (!poolInfo || poolInfo.data.length === 0) {
+        if (await applyServerPoolFallback()) return;
         setState({ ...DEFAULT_STATE, poolAddress: pdas.poolPda, vaultAuthAddress: pdas.vaultAuthPda });
         return;
       }
@@ -178,6 +305,7 @@ export function useStakePool() {
         poolData = null;
       }
       if (!poolData) {
+        if (await applyServerPoolFallback()) return;
         setState({ ...DEFAULT_STATE, poolAddress: pdas.poolPda, vaultAuthAddress: pdas.vaultAuthPda });
         return;
       }
@@ -288,10 +416,17 @@ export function useStakePool() {
         cooldownElapsed,
       });
     } catch (err) {
+      // RPC path failed outright (e.g. the /api/rpc proxy rejected the
+      // request) — try the server directory before reporting an error
+      // state; a pool that exists on-chain must not render as missing.
+      if (await applyServerPoolFallback()) {
+        setError(null);
+        return;
+      }
       console.error('[useStakePool] Failed to refresh:', err);
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [pdas, connection, walletPubkeyStr, slabState.config]);
+  }, [pdas, connection, walletPubkeyStr, slabState.config, applyServerPoolFallback]);
 
   // Auto-refresh using ref to avoid stale closure (same pattern as useInsuranceLP)
   const refreshRef = useRef(refreshState);

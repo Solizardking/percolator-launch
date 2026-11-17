@@ -514,7 +514,7 @@ function MarketsPageInner() {
 
   // Primary: progressive auto-reveal (loads all items within ~200ms)
   useEffect(() => {
-    if (discoveryLoading || statsLoading) return; // wait for data
+    if (statsLoading) return; // wait for the directory data that drives the rows
     if (displayCount >= filtered.length) return; // all shown
 
     const handle = requestAnimationFrame(() => {
@@ -578,7 +578,15 @@ function MarketsPageInner() {
   }, [displayedMarkets.map((m) => m.slabAddress).join(",")]);
   const { prices: spotPrices } = useSpotPrices(spotMints, 30_000);
 
-  const loading = discoveryLoading || statsLoading;
+  // Rows render from the directory stats as soon as they load. On-chain
+  // discovery only ENRICHES rows (health/price from the slab) when it
+  // settles — it must not gate the list. Discovery rides the /api/rpc
+  // proxy through the batching transport, whose retries can stretch a
+  // failure into minutes; gating on it left this page on skeleton bars
+  // forever while the header count (from stats) already showed the
+  // markets. Supabase-only rows render with stats-derived values and
+  // "—" where a stat is unavailable.
+  const loading = statsLoading;
   const showDegradedBanner = Boolean(loadErrorMessage && !loading && filtered.length > 0);
 
   // P-MED-4: Separate clear functions

@@ -145,6 +145,42 @@ export function createBatchRpc(config: BatchRpcConfig) {
           continue;
         }
 
+        // Permanent client errors (4xx other than 429): do NOT retry.
+        // Retrying a deterministic rejection (e.g. the /api/rpc proxy's
+        // 403 origin guard) turns a fast, legible failure into a
+        // minute-long hang for every caller in the batch — this is what
+        // froze market discovery when the proxy rejected the site's own
+        // origin. Surface the proxy's JSON-RPC error body as-is when it
+        // parses; otherwise synthesize one carrying the HTTP status.
+        if (!response.ok && response.status >= 400 && response.status < 500) {
+          let parsed: unknown = null;
+          try {
+            parsed = JSON.parse(await response.text());
+          } catch { /* body wasn't JSON — synthesize below */ }
+          for (const p of batch) {
+            if (
+              parsed &&
+              typeof parsed === "object" &&
+              "error" in (parsed as Record<string, unknown>)
+            ) {
+              p.resolve(JSON.stringify({
+                ...(parsed as Record<string, unknown>),
+                id: p.id,
+              }));
+            } else {
+              p.resolve(JSON.stringify({
+                jsonrpc: "2.0",
+                error: {
+                  code: -32603,
+                  message: `RPC proxy rejected request: HTTP ${response.status}`,
+                },
+                id: p.id,
+              }));
+            }
+          }
+          return;
+        }
+
         // Non-2xx (excluding 429 handled above): throw so the retry loop catches it.
         // Without this guard, a 5xx with an empty body causes response.json() to throw
         // "SyntaxError: Unexpected end of JSON input" — masking the real HTTP error.

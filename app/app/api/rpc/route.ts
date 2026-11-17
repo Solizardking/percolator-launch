@@ -376,8 +376,18 @@ function isAllowedOrigin(req: NextRequest): boolean {
     return true;
   }
 
-  // Accept the apex domain and its subdomains only.
-  return hostname === "percolatorlaunch.com" || hostname.endsWith(".percolatorlaunch.com");
+  // Accept the apex domains and their subdomains only. BOTH domains are
+  // ours: percolatorlaunch.com is the legacy domain, percolator.tech is
+  // the current one — the app is served from launch.percolator.tech.
+  // The allowlist previously named only percolatorlaunch.com, so every
+  // browser RPC read from the live site (launch.percolator.tech) was
+  // rejected 403 here: useStakePool swallowed the failure and reported
+  // initialized pools as "Not Initialized", and market discovery hung
+  // in batch-RPC retries so /markets never rendered its rows.
+  const ALLOWED_APEX_DOMAINS = ["percolatorlaunch.com", "percolator.tech"];
+  return ALLOWED_APEX_DOMAINS.some(
+    (apex) => hostname === apex || hostname.endsWith(`.${apex}`)
+  );
 }
 
 export async function POST(req: NextRequest) {

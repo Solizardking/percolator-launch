@@ -47,6 +47,68 @@ describe("/api/rpc origin guard", () => {
     expect(res.status).toBe(200);
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
+
+  it("allows the production host launch.percolator.tech", async () => {
+    // Regression: the allowlist named only percolatorlaunch.com, so
+    // every browser RPC read from the live site was 403'd — stake pool
+    // reads failed ("Vault Not Initialized" for initialized pools) and
+    // market discovery hung.
+    // (Unique params: the route caches getHealth for 5s per method+params,
+    // and the fixed-body makeReq above would be served from that cache.)
+    const req = new NextRequest("http://localhost/api/rpc", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://launch.percolator.tech",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "getHealth",
+        params: ["launch-host"],
+      }),
+    });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows the percolator.tech apex", async () => {
+    const req = new NextRequest("http://localhost/api/rpc", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://percolator.tech",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "getHealth",
+        params: ["apex-host"],
+      }),
+    });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks lookalike percolator.tech hostnames", async () => {
+    const req = makeReq("https://evilpercolator.tech");
+    const res = await POST(req);
+
+    expect(res.status).toBe(403);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("blocks suffix-attack hostnames under an allowed apex", async () => {
+    const req = makeReq("https://launch.percolator.tech.evil.com");
+    const res = await POST(req);
+
+    expect(res.status).toBe(403);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
 });
 
 describe("/api/rpc no-Origin server-call gate", () => {
