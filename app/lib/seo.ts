@@ -11,7 +11,7 @@ import type { Metadata } from "next";
 
 export const SITE_NAME = "Percolator";
 export const SITE_URL = "https://percolator.trade";
-export const TWITTER_HANDLE = "@PercolatorTrade";
+export const TWITTER_HANDLE = "@0rdlibrary";
 
 type PageMetaOpts = {
   /** Bare page title (no brand). The root template appends " | Percolator". */

@@ -32,7 +32,7 @@ export const Footer: FC = () => {
           {/* Center - links */}
           <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-5 text-[11px] text-[var(--text-secondary)]">
             <a
-              href="https://github.com/dcccrypto/percolator-launch"
+              href="https://github.com/solizardking"
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-7 w-7 items-center justify-center rounded-sm border border-[var(--border)] text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)]"
@@ -43,7 +43,7 @@ export const Footer: FC = () => {
               </svg>
             </a>
             <a
-              href="https://x.com/PercolatorTrade"
+              href="https://x.com/0rdlibrary"
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-7 w-7 items-center justify-center rounded-sm border border-[var(--border)] text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)]"
@@ -98,6 +98,17 @@ export const Footer: FC = () => {
 
           {/* Right - powered by */}
           <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
+            <span>built on</span>
+            <a
+              href="https://github.com/aeyakovenko/percolator"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
+              title="Upstream: toly's original Percolator"
+            >
+              toly&rsquo;s original Percolator
+            </a>
+            <span className="h-3 w-px bg-[var(--border)]" />
             <span>powered by</span>
             <span className="font-semibold text-[var(--text-secondary)]">solana</span>
           </div>

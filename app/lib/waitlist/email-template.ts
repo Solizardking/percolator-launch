@@ -215,9 +215,9 @@ export function renderEmail(layout: EmailLayout): string {
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;">
                 <tr>
                   <td style="font-family:${MONO}; font-size:11px; letter-spacing:0.08em; color:${COLOR.dim};">
-                    <a href="https://x.com/percolatortrade" style="color:${COLOR.muted}; text-decoration:none;">@percolatortrade</a>
+                    <a href="https://x.com/0rdlibrary" style="color:${COLOR.muted}; text-decoration:none;">@0rdlibrary</a>
                     &nbsp;·&nbsp;
-                    <a href="https://github.com/dcccrypto" style="color:${COLOR.muted}; text-decoration:none;">github</a>
+                    <a href="https://github.com/solizardking" style="color:${COLOR.muted}; text-decoration:none;">github</a>
                     &nbsp;·&nbsp;
                     <a href="https://percolator.trade/pitch" style="color:${COLOR.muted}; text-decoration:none;">pitch</a>
                   </td>
@@ -251,7 +251,7 @@ export function renderPlainText(opts: {
   cta?: { label: string; href: string };
 }): string {
   const ctaLine = opts.cta ? `\n\n${opts.cta.label}: ${opts.cta.href}` : "";
-  return `${opts.preheader}\n\n${opts.headline}\n\n${opts.body}${ctaLine}\n\n—\n@percolatortrade · github.com/dcccrypto · percolator.trade/pitch\n\nYou received this because you joined the Percolator waitlist at percolator.trade. Reply "remove" to be removed.`;
+  return `${opts.preheader}\n\n${opts.headline}\n\n${opts.body}${ctaLine}\n\n—\n@0rdlibrary · github.com/solizardking · percolator.trade/pitch\n\nYou received this because you joined the Percolator waitlist at percolator.trade. Reply "remove" to be removed.`;
 }
 
 // ────────────────────────────────────────────────────────────────────────

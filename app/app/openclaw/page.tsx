@@ -495,7 +495,7 @@ PROGRESS.md    → structured     (Last HB / Task / Status / Next / Blockers)</p
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
         <div style="display:flex;gap:32px;flex-wrap:wrap;">
           <div><div style="font-size:0.72rem;color:var(--muted);font-family:var(--font-mono);">DISCORD</div><div style="font-size:0.9rem;color:var(--cyan);">discord.gg/fJa4BDBxPN</div></div>
-          <div><div style="font-size:0.72rem;color:var(--muted);font-family:var(--font-mono);">GITHUB</div><div style="font-size:0.9rem;color:var(--cyan);">github.com/dcccrypto/percolator-launch</div></div>
+          <div><div style="font-size:0.72rem;color:var(--muted);font-family:var(--font-mono);">GITHUB</div><div style="font-size:0.9rem;color:var(--cyan);">github.com/Solizardking/percolator-launch</div></div>
           <div><div style="font-size:0.72rem;color:var(--muted);font-family:var(--font-mono);">COLLECTOR BASE</div><div style="font-size:0.9rem;color:var(--cyan);">http://127.0.0.1:18801</div></div>
         </div>
       </div>

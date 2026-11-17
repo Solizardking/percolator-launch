@@ -309,7 +309,7 @@ export const Header: FC = () => {
           {/* Social links */}
           <div className="mt-1 flex items-center gap-2 border-t border-[var(--border)] px-3 pt-3">
             <a
-              href="https://github.com/dcccrypto/percolator-launch"
+              href="https://github.com/solizardking"
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-8 w-8 items-center justify-center rounded-sm border border-[var(--border)] text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)]"
@@ -320,7 +320,7 @@ export const Header: FC = () => {
               </svg>
             </a>
             <a
-              href="https://x.com/PercolatorTrade"
+              href="https://x.com/0rdlibrary"
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-8 w-8 items-center justify-center rounded-sm border border-[var(--border)] text-[var(--text-muted)] transition-all hover:border-[var(--border-hover)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)]"

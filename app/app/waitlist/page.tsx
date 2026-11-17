@@ -1035,8 +1035,8 @@ function SignupFlow({
       ? `https://percolator.trade/r/${state.referralCode}`
       : "https://percolator.trade";
     const shareText = state.referralCode
-      ? `Just joined the @percolatortrade waitlist. Permissionless perp futures on Solana. Use my code ${state.referralCode}: ${shareUrl}`
-      : "Just joined the @percolatortrade waitlist. Permissionless perp futures on Solana. percolator.trade";
+      ? `Just joined the @0rdlibrary waitlist. Permissionless perp futures on Solana. Use my code ${state.referralCode}: ${shareUrl}`
+      : "Just joined the @0rdlibrary waitlist. Permissionless perp futures on Solana. percolator.trade";
     const headlineLabel = state.returning ? "✓ welcome back" : "✓ on the list";
     const subline = state.returning
       ? "You're already on the list — sharing your code below."
@@ -1044,12 +1044,12 @@ function SignupFlow({
         <>
           We&apos;ll DM you on X at{" "}
           <a
-            href="https://x.com/percolatortrade"
+            href="https://x.com/0rdlibrary"
             target="_blank"
             rel="noopener noreferrer"
             className="text-[var(--accent)] hover:underline"
           >
-            @percolatortrade
+            @0rdlibrary
           </a>{" "}
           when there&apos;s major news.
         </>
@@ -1368,12 +1368,12 @@ function NoCodeFallback() {
     <p className="font-mono text-[11px] leading-relaxed text-[var(--text-secondary)]">
       Don&apos;t have a code?{" "}
       <a
-        href="https://x.com/percolatortrade"
+        href="https://x.com/0rdlibrary"
         target="_blank"
         rel="noopener noreferrer"
         className="text-[var(--accent)] underline-offset-2 hover:underline"
       >
-        Follow @percolatortrade
+        Follow @0rdlibrary
       </a>{" "}
       — we drop codes on tweets every so often.
     </p>
@@ -1603,7 +1603,7 @@ function Security() {
     <div>
       <InfoRow title="Open source">
         The trading program, risk engine, SDK, indexer and this app are public under Apache 2.0 at{" "}
-        <ExtLink href="https://github.com/dcccrypto">github.com/dcccrypto</ExtLink>.
+        <ExtLink href="https://github.com/solizardking">github.com/solizardking</ExtLink>.
       </InfoRow>
       <InfoRow title="Formal verification">
         The risk engine and program are checked with Kani, a model checker that proves a property holds for every
@@ -1670,7 +1670,7 @@ function FAQ() {
       "Why do I need a referral code?",
       <>
         The waitlist is invite-only. Every member gets a code to share. If you don&apos;t have one, follow{" "}
-        <ExtLink href="https://x.com/percolatortrade">@percolatortrade</ExtLink>; we post codes there.
+        <ExtLink href="https://x.com/0rdlibrary">@0rdlibrary</ExtLink>; we post codes there.
       </>,
     ],
     [
@@ -1694,7 +1694,7 @@ function FAQ() {
     [
       "How do I leave the waitlist?",
       <>
-        Message <ExtLink href="https://x.com/percolatortrade">@percolatortrade</ExtLink> on X or email{" "}
+        Message <ExtLink href="https://x.com/0rdlibrary">@0rdlibrary</ExtLink> on X or email{" "}
         <a href="mailto:contact@percolator.trade" className="text-[var(--accent)] hover:underline">
           contact@percolator.trade
         </a>
@@ -1741,12 +1741,12 @@ function Footer() {
       </div>
       <div className="font-mono text-[11.5px]">
         <a
-          href="https://x.com/percolatortrade"
+          href="https://x.com/0rdlibrary"
           target="_blank"
           rel="noopener noreferrer"
           className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
         >
-          @percolatortrade
+          @0rdlibrary
         </a>
         <span className="mx-2 text-[var(--text-dim)]">·</span>
         <a
@@ -1757,7 +1757,7 @@ function Footer() {
         </a>
         <span className="mx-2 text-[var(--text-dim)]">·</span>
         <a
-          href="https://github.com/dcccrypto"
+          href="https://github.com/solizardking"
           target="_blank"
           rel="noopener noreferrer"
           className="text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"

@@ -13,10 +13,10 @@ const STEPS = [
     number: "01",
     title: "Fork & clone",
     description:
-      "Fork dcccrypto/percolator-launch (or whichever repo). Clone locally. For Rust repos: rustup override set stable.",
+      "Fork Solizardking/percolator-launch (or whichever repo). Clone locally. For Rust repos: rustup override set stable.",
     link: {
       label: "percolator-launch →",
-      url: "https://github.com/dcccrypto/percolator-launch/fork",
+      url: "https://github.com/Solizardking/percolator-launch/fork",
     },
   },
   {
@@ -33,7 +33,7 @@ const STEPS = [
       'Browse "good first issue" labels or ask in #dev on Discord. Comment on the issue before starting work.',
     link: {
       label: "good first issues →",
-      url: "https://github.com/dcccrypto/percolator-launch/labels/good%20first%20issue",
+      url: "https://github.com/Solizardking/percolator-launch/labels/good%20first%20issue",
     },
   },
   {
@@ -157,7 +157,7 @@ export const HowToContribute: FC<Props> = ({
           Discord server
         </a>
         <a
-          href="https://github.com/dcccrypto/percolator-launch/discussions"
+          href="https://github.com/Solizardking/percolator-launch/discussions"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-5 py-2.5 text-sm font-medium text-[var(--text)] transition-all duration-200 hover:bg-[var(--border)]"

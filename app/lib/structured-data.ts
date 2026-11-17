@@ -2,8 +2,8 @@ import { SITE_NAME, SITE_URL } from "@/lib/seo";
 
 const LOGO_URL = `${SITE_URL}/icon.png`;
 const SAME_AS = [
-  "https://x.com/PercolatorTrade",
-  "https://github.com/dcccrypto/percolator-launch",
+  "https://x.com/0rdlibrary",
+  "https://github.com/solizardking",
   "https://discord.gg/fJa4BDBxPN",
 ];
 

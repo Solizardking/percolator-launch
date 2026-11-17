@@ -663,7 +663,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "referral code required — Percolator is invite-only. Ask a member for a code or follow @percolatortrade for drops.",
+          "referral code required — Percolator is invite-only. Ask a member for a code or follow @0rdlibrary for drops.",
       },
       { status: 400 },
     );
