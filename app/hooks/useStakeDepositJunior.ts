@@ -5,14 +5,13 @@ import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { useWalletCompat, useConnectionCompat } from "@/hooks/useWalletCompat";
 import {
   getStakeProgramId,
-  STAKE_POOL_SIZE,
   deriveStakePool,
   deriveStakeVaultAuth,
   deriveDepositPda,
   encodeStakeDepositJunior,
   depositAccounts,
-  decodeStakePool,
 } from "@percolatorct/sdk";
+import { STAKE_POOL_MIN_SIZE, decodeStakePool } from "@/lib/stakePool";
 import {
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
@@ -91,9 +90,10 @@ export function useStakeDepositJunior({ slabAddress, collateralMint }: StakeDepo
         const [vaultAuth] = deriveStakeVaultAuth(pool);
         const [depositPda] = deriveDepositPda(pool, wallet.publicKey);
 
-        // Fetch pool account to get lpMint and vault addresses
+        // Fetch pool account to get lpMint and vault addresses.
+        // Accept the v1 pool size (352) — see lib/stakePool.ts.
         const poolInfo = await connection.getAccountInfo(pool);
-        if (!poolInfo || poolInfo.data.length < STAKE_POOL_SIZE) {
+        if (!poolInfo || poolInfo.data.length < STAKE_POOL_MIN_SIZE) {
           throw new Error("Stake pool not initialized for this market. Contact admin.");
         }
 

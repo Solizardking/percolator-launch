@@ -4,12 +4,11 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { PublicKey } from '@solana/web3.js';
 import { useWalletCompat, useConnectionCompat } from '@/hooks/useWalletCompat';
 import {
-  STAKE_POOL_SIZE,
   deriveStakePool,
   deriveStakeVaultAuth,
   deriveDepositPda,
-  decodeStakePool,
 } from '@percolatorct/sdk';
+import { decodeStakePool } from '@/lib/stakePool';
 import { useSlabState } from '@/components/providers/SlabProvider';
 import { useParams } from 'next/navigation';
 import {
@@ -167,8 +166,10 @@ export function useStakePool() {
         return;
       }
 
-      // Decode pool using canonical StakePool layout from SDK (352 bytes).
-      // Avoids manual byte offset arithmetic — offsets are versioned in decodeStakePool.
+      // Decode pool with the version-tolerant local decoder (v1 352-byte
+      // and v2 384-byte layouts) — see lib/stakePool.ts. The pinned SDK's
+      // decodeStakePool throws on the live v1 pools, which used to make
+      // this hook report poolExists=false for initialized pools.
       let poolData: ReturnType<typeof decodeStakePool> | null = null;
       try {
         poolData = decodeStakePool(Buffer.from(poolInfo.data));

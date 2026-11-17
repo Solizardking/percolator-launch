@@ -7,9 +7,8 @@ import { PublicKey } from "@solana/web3.js";
 import {
   deriveStakePool,
   deriveDepositPda,
-  STAKE_POOL_SIZE,
-  decodeStakePool,
 } from "@percolatorct/sdk";
+import { STAKE_POOL_MIN_SIZE, decodeStakePool } from "@/lib/stakePool";
 import { unpackAccount, getMint } from "@solana/spl-token";
 import { useStakeDepositByPool } from "@/hooks/useStakeDepositByPool";
 import { useStakeDepositJunior } from "@/hooks/useStakeDepositJunior";
@@ -725,9 +724,10 @@ export default function StakePage() {
             const [poolPda] = deriveStakePool(slabPk);
             const [depositPdaAddress] = deriveDepositPda(poolPda, publicKey);
 
-            // Fetch pool account to get lpMint using canonical StakePool layout
+            // Fetch pool account to get lpMint. Accept the v1 pool size
+            // (352) — see lib/stakePool.ts.
             const poolInfo = await connection.getAccountInfo(poolPda);
-            if (!poolInfo || poolInfo.data.length < STAKE_POOL_SIZE) continue;
+            if (!poolInfo || poolInfo.data.length < STAKE_POOL_MIN_SIZE) continue;
             const { lpMint } = decodeStakePool(Buffer.from(poolInfo.data));
 
             // Get user LP ATA balance

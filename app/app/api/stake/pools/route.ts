@@ -2,8 +2,9 @@
  * GET /api/stake/pools
  *
  * Returns all initialized StakePool accounts from the percolator-stake
- * devnet program, enriched with market name/symbol from Supabase,
- * vault token balance from RPC, and trailing APR from insurance snapshots.
+ * program on the app's configured network, enriched with market
+ * name/symbol from Supabase, vault token balance from RPC, and trailing
+ * APR from insurance snapshots.
  *
  * Response shape matches the StakePool interface used on the /stake page.
  */
@@ -12,6 +13,7 @@ import { NextResponse } from "next/server";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getServiceClient, getServerNetwork } from "@/lib/supabase";
 import { getRpcEndpoint } from "@/lib/config";
+import { STAKE_POOL_MIN_SIZE } from "@/lib/stakePool";
 import { getStakeProgramId } from "@percolatorct/sdk";
 import * as Sentry from "@sentry/nextjs";
 
@@ -218,11 +220,13 @@ export const dynamic = "force-dynamic";
 // ── Constants ────────────────────────────────────────────────────────────────
 
 /**
- * Expected on-chain size of a StakePool account (must match Rust struct).
- * v2 (stake program ≥ v2): 384 bytes — added pending_admin [u8;32] at offset 288.
- * v1 was 352 bytes; using the old size causes getProgramAccounts to return 0 results on v17 devnet.
+ * Minimum on-chain size of a StakePool account (STAKE_POOL_MIN_SIZE from
+ * lib/stakePool): v1 pools are 352 bytes, v2 pools are 384 (v2 added
+ * pending_admin [u8;32] at offset 288). The stake program deployed on
+ * devnet still creates v1 (352-byte) pools, so filtering or parsing with
+ * the v2 size returns 0 pools. Every field parsed below lives in the
+ * 288-byte prefix shared by both layouts.
  */
-const STAKE_POOL_SIZE = 384;
 
 // ── Binary layout helpers ─────────────────────────────────────────────────────
 
@@ -259,7 +263,9 @@ interface ParsedStakePool {
 }
 
 /**
- * Parse the raw 384-byte StakePool v2 account data.
+ * Parse a raw StakePool account (v1 352-byte or v2 384-byte layout).
+ * Only fields in the shared 288-byte prefix are read here, so one parser
+ * serves both versions.
  *
  * Rust layout (repr(C), #[derive(Pod)]):
  *   0:  is_initialized u8
@@ -285,11 +291,12 @@ interface ParsedStakePool {
  * 272:    last_vault_snapshot  u64
  * 280:    pool_mode       u8
  * 281-287: _mode_padding  [u8; 7]
- * 288-319: pending_admin  [u8; 32]  ← NEW in v2 (ProposeAdmin two-step pattern)
- * 320-383: _reserved      [u8; 64]
+ * 288-319: pending_admin  [u8; 32]  ← v2 only (ProposeAdmin two-step pattern);
+ *                                     v1 has the reserved tail here instead
+ * 320-383: _reserved      [u8; 64]  ← v2 (v1: 288-351)
  */
 function parseStakePool(data: Buffer): ParsedStakePool | null {
-  if (data.length < STAKE_POOL_SIZE) return null;
+  if (data.length < STAKE_POOL_MIN_SIZE) return null;
   const isInitialized = data[0] === 1;
   if (!isInitialized) return null;
 
@@ -331,10 +338,15 @@ export async function GET() {
     // when the stake program hasn't been deployed yet.
     let stakeProgramId: PublicKey;
     try {
-      // Use the mainnet stake program directly. The SDK's env-based detection
-      // and getServerNetwork() both fail in Vercel API routes when
-      // NEXT_PUBLIC_DEFAULT_NETWORK is set to devnet or not inlined at build time.
-      stakeProgramId = new PublicKey("DC5fovFQD5SZYsetwvEqd4Wi4PFY1Yfnc669VMe6oa7F");
+      // Stake program for the app's configured network, from the same SDK
+      // registry the client hooks use (getStakeProgramId). Passing the
+      // network explicitly avoids the SDK's env auto-detection, which is
+      // unreliable in API routes; getServerNetwork() reads the same
+      // NEXT_PUBLIC_DEFAULT_NETWORK env that getRpcEndpoint() uses to pick
+      // the RPC network, so program and RPC always agree. (This route
+      // previously hardcoded the MAINNET program id while the RPC pointed
+      // at devnet, so it could never find the devnet pools.)
+      stakeProgramId = getStakeProgramId(getServerNetwork());
     } catch {
       // Stake program not available on this network — return empty pools
       return NextResponse.json({ pools: [] }, {
@@ -344,9 +356,12 @@ export async function GET() {
 
     const connection = new Connection(getRpcEndpoint(), "confirmed");
 
-    // 1. Fetch all on-chain StakePool accounts
+    // 1. Fetch all on-chain StakePool accounts. No dataSize filter: pools
+    // exist at both 352 (v1) and 384 (v2) bytes — parseStakePool below
+    // decode-filters (it rejects anything shorter than the v1 layout,
+    // e.g. the 152-byte DepositPda accounts the program also owns).
     const rawAccounts = await connection.getProgramAccounts(stakeProgramId, {
-      filters: [{ dataSize: STAKE_POOL_SIZE }],
+      filters: [],
     });
 
     if (rawAccounts.length === 0) {

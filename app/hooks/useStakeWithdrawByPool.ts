@@ -5,14 +5,13 @@ import { PublicKey, TransactionInstruction } from '@solana/web3.js';
 import { useWalletCompat, useConnectionCompat } from '@/hooks/useWalletCompat';
 import {
   getStakeProgramId,
-  STAKE_POOL_SIZE,
   deriveStakePool,
   deriveStakeVaultAuth,
   deriveDepositPda,
   encodeStakeWithdraw,
   withdrawAccounts,
-  decodeStakePool,
 } from '@percolatorct/sdk';
+import { STAKE_POOL_MIN_SIZE, decodeStakePool } from '@/lib/stakePool';
 import {
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
@@ -86,7 +85,7 @@ export function useStakeWithdrawByPool({ slabAddress, collateralMint }: StakeWit
 
         // Fetch pool account to get lpMint and vault
         const poolInfo = await connection.getAccountInfo(pool);
-        if (!poolInfo || poolInfo.data.length < STAKE_POOL_SIZE) {
+        if (!poolInfo || poolInfo.data.length < STAKE_POOL_MIN_SIZE) {
           throw new Error('Stake pool not initialized for this market.');
         }
 
@@ -98,8 +97,8 @@ export function useStakeWithdrawByPool({ slabAddress, collateralMint }: StakeWit
           throw new Error('Stake pool account owner mismatch — possible network misconfiguration.');
         }
 
-        // Decode pool using canonical StakePool layout from SDK (352 bytes).
-        // Avoids manual byte offset arithmetic — offsets are versioned in decodeStakePool.
+        // Decode pool with the version-tolerant local decoder (v1 + v2
+        // layouts) — see lib/stakePool.ts.
         const { lpMint, vault } = decodeStakePool(Buffer.from(poolInfo.data));
 
         // Get user's ATAs

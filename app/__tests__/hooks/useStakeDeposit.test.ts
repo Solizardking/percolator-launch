@@ -42,13 +42,15 @@ vi.mock('@percolatorct/sdk', () => {
   const devnetProgramId = new PK('6aJb1F9CDCVWCNYFwj8aQsVb696YnW6J1FznteHq4Q6k');
   return {
     STAKE_PROGRAM_ID: devnetProgramId,
-    STAKE_POOL_SIZE: 352,
     getStakeProgramId: vi.fn().mockReturnValue(devnetProgramId),
     deriveStakePool: vi.fn().mockReturnValue([mockPool, 255]),
     deriveStakeVaultAuth: vi.fn().mockReturnValue([mockVaultAuth, 254]),
     deriveDepositPda: vi.fn().mockReturnValue([mockDepositPda, 253]),
     encodeStakeDeposit: vi.fn().mockReturnValue(Buffer.concat([Buffer.from([1]), Buffer.alloc(8)])),
-    decodeStakePool: vi.fn().mockReturnValue({ lpMint: mockLpMint, vault: mockVault }),
+    // NOTE: decodeStakePool / pool size are intentionally NOT mocked —
+    // the hook uses the real local decoder in lib/stakePool, and the pool
+    // buffer below is built with the real v1 layout offsets, so these
+    // tests exercise the actual 352-byte decode path.
     depositAccounts: vi.fn().mockReturnValue([
       { pubkey: new PK('7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'), isSigner: true, isWritable: false },
     ]),
@@ -76,12 +78,14 @@ import { useParams } from 'next/navigation';
 import { sendTx } from '@/lib/tx';
 import { encodeStakeDeposit, depositAccounts } from '@percolatorct/sdk';
 
-// Build a fake pool account buffer sized like the real StakePool account.
+// Build a fake pool account buffer with the real v1 StakePool layout
+// (352 bytes): lpMint at offset 104, vault at offset 136 — the local
+// decoder in lib/stakePool reads these exact offsets.
 function buildPoolAccountData(): Buffer {
   const buf = Buffer.alloc(352);
   buf[0] = 1; // is_initialized
-  mockLpMint.toBuffer().copy(buf, 65);
-  mockVault.toBuffer().copy(buf, 97);
+  mockLpMint.toBuffer().copy(buf, 104);
+  mockVault.toBuffer().copy(buf, 136);
   return buf;
 }
 
@@ -138,6 +142,12 @@ describe('useStakeDeposit', () => {
     expect(encodeStakeDeposit).toHaveBeenCalledWith(1_000_000n);
     expect(depositAccounts).toHaveBeenCalled();
     expect(sendTx).toHaveBeenCalled();
+
+    // The lpMint/vault passed to the instruction builder must be the ones
+    // decoded from the 352-byte pool buffer by the real local decoder.
+    const depositArgs = vi.mocked(depositAccounts).mock.calls[0][0] as any;
+    expect(depositArgs.lpMint.toBase58()).toBe(mockLpMint.toBase58());
+    expect(depositArgs.vault.toBase58()).toBe(mockVault.toBase58());
   });
 
   it('rejects when wallet not connected', async () => {

@@ -38,18 +38,14 @@ vi.mock('@percolatorct/sdk', () => {
   const devnetProgramId = new PK('6aJb1F9CDCVWCNYFwj8aQsVb696YnW6J1FznteHq4Q6k');
   return {
     STAKE_PROGRAM_ID: devnetProgramId,
-    STAKE_POOL_SIZE: 352,
     getStakeProgramId: vi.fn().mockReturnValue(devnetProgramId),
     deriveStakePool: vi.fn().mockReturnValue([mockPool, 255]),
     deriveStakeVaultAuth: vi.fn().mockReturnValue([mockVaultAuth, 254]),
     deriveDepositPda: vi.fn().mockReturnValue([mockDepositPda, 253]),
-    decodeStakePool: vi.fn().mockReturnValue({
-      isInitialized: true,
-      lpMint: mockLpMint,
-      vault: mockVault,
-      cooldownSlots: 100n,
-      depositCap: 0n,
-    }),
+    // NOTE: decodeStakePool is intentionally NOT mocked — the hook uses
+    // the real local decoder in lib/stakePool, and the pool buffer below
+    // is built with the real v1 layout offsets, so poolExists and the
+    // decoded fields are exercised against the actual 352-byte layout.
   };
 });
 
@@ -76,15 +72,16 @@ function buildPoolAccountData(opts?: {
   depositCap?: bigint;
   totalDeposited?: bigint;
 }): Buffer {
+  // Real v1 StakePool layout (352 bytes), offsets per lib/stakePool:
+  // lpMint @104, vault @136, totalDeposited @168, cooldownSlots @184,
+  // depositCap @192.
   const buf = Buffer.alloc(352);
-  buf[0] = 1;
-  mockLpMint.toBuffer().copy(buf, 65);
-  mockVault.toBuffer().copy(buf, 97);
-  mockVaultAuth.toBuffer().copy(buf, 129);
-  buf[161] = 254;
-  buf.writeBigUInt64LE(opts?.cooldownSlots ?? 0n, 162);
-  buf.writeBigUInt64LE(opts?.depositCap ?? 0n, 170);
-  buf.writeBigUInt64LE(opts?.totalDeposited ?? 0n, 178);
+  buf[0] = 1; // is_initialized
+  mockLpMint.toBuffer().copy(buf, 104);
+  mockVault.toBuffer().copy(buf, 136);
+  buf.writeBigUInt64LE(opts?.totalDeposited ?? 0n, 168);
+  buf.writeBigUInt64LE(opts?.cooldownSlots ?? 0n, 184);
+  buf.writeBigUInt64LE(opts?.depositCap ?? 0n, 192);
   return buf;
 }
 
@@ -167,6 +164,8 @@ describe('useStakePool', () => {
     expect(result.current.state.vaultBalance).toBe(5_000_000n);
     expect(result.current.state.lpSupply).toBe(10_000_000n);
     expect(result.current.state.redemptionRateE6).toBe(500_000n);
+    // LP mint must be the one decoded from the buffer by the real decoder
+    expect(result.current.state.lpMintAddress?.toBase58()).toBe(mockLpMint.toBase58());
   });
 
   it('calculates user share percentage', async () => {

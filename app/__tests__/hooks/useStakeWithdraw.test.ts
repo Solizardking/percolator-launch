@@ -42,13 +42,14 @@ vi.mock('@percolatorct/sdk', () => {
   const devnetProgramId = new PK('6aJb1F9CDCVWCNYFwj8aQsVb696YnW6J1FznteHq4Q6k');
   return {
     STAKE_PROGRAM_ID: devnetProgramId,
-    STAKE_POOL_SIZE: 352,
     getStakeProgramId: vi.fn().mockReturnValue(devnetProgramId),
     deriveStakePool: vi.fn().mockReturnValue([mockPool, 255]),
     deriveStakeVaultAuth: vi.fn().mockReturnValue([mockVaultAuth, 254]),
     deriveDepositPda: vi.fn().mockReturnValue([mockDepositPda, 253]),
     encodeStakeWithdraw: vi.fn().mockReturnValue(Buffer.concat([Buffer.from([2]), Buffer.alloc(8)])),
-    decodeStakePool: vi.fn().mockReturnValue({ lpMint: mockLpMint, vault: mockVault }),
+    // NOTE: decodeStakePool / pool size are intentionally NOT mocked —
+    // the hook uses the real local decoder in lib/stakePool, and the pool
+    // buffer below is built with the real v1 layout offsets.
     withdrawAccounts: vi.fn().mockReturnValue([
       { pubkey: new PK('7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'), isSigner: true, isWritable: false },
     ]),
@@ -74,11 +75,13 @@ import { useParams } from 'next/navigation';
 import { sendTx } from '@/lib/tx';
 import { encodeStakeWithdraw, withdrawAccounts } from '@percolatorct/sdk';
 
+// Real v1 StakePool layout (352 bytes): lpMint at offset 104, vault at
+// offset 136 — read by the real local decoder in lib/stakePool.
 function buildPoolAccountData(): Buffer {
   const buf = Buffer.alloc(352);
   buf[0] = 1;
-  mockLpMint.toBuffer().copy(buf, 65);
-  mockVault.toBuffer().copy(buf, 97);
+  mockLpMint.toBuffer().copy(buf, 104);
+  mockVault.toBuffer().copy(buf, 136);
   return buf;
 }
 

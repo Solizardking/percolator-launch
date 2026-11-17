@@ -37,7 +37,6 @@ vi.mock('@percolatorct/sdk', () => {
   return {
     STAKE_PROGRAM_ID: devnetProgramId,
     getStakeProgramId: vi.fn().mockReturnValue(devnetProgramId),
-    STAKE_POOL_SIZE: 352,
     deriveStakePool: vi.fn().mockReturnValue([mockPool, 255]),
     deriveStakeVaultAuth: vi.fn().mockReturnValue([mockVaultAuth, 254]),
     deriveDepositPda: vi.fn().mockReturnValue([mockDepositPda, 253]),
@@ -45,7 +44,8 @@ vi.mock('@percolatorct/sdk', () => {
     withdrawAccounts: vi.fn().mockReturnValue([
       { pubkey: new PK('7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'), isSigner: true, isWritable: false },
     ]),
-    decodeStakePool: vi.fn().mockReturnValue({ lpMint: mockLpMint, vault: mockVault }),
+    // NOTE: decodeStakePool / pool size are intentionally NOT mocked —
+    // the hook uses the real local decoder in lib/stakePool.
   };
 });
 
@@ -68,9 +68,10 @@ import { useConnectionCompat, useWalletCompat } from '@/hooks/useWalletCompat';
 import { sendTx } from '@/lib/tx';
 import { encodeStakeWithdraw, withdrawAccounts } from '@percolatorct/sdk';
 
-// Build a fake pool account buffer (352 bytes — canonical StakePool size).
-// lpMint at offset 104, vault at offset 136 per decodeStakePool layout.
-// decodeStakePool is mocked, so exact content doesn't matter; size must be ≥ 352.
+// Build a fake pool account buffer (352 bytes — the real v1 StakePool
+// size). lpMint at offset 104, vault at offset 136 per the on-chain
+// layout; the hook decodes them with the real local decoder, so the
+// content DOES matter.
 function buildPoolAccountData(): Buffer {
   const buf = Buffer.alloc(352);
   buf[0] = 1; // is_initialized
