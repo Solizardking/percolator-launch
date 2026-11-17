@@ -72,9 +72,22 @@ export function VaultCard({ vault }: VaultCardProps) {
             />
             <MetricCell
               label="Max Leverage"
-              value={`${vault.maxLeverage || 10}×`}
+              value={vault.maxLeverage > 0 ? `${vault.maxLeverage}×` : '—'}
             />
           </div>
+
+          {/* Pool state — a market whose stake pool was never initialized
+              gets labeled, not hidden and not given a fake deposit CTA. */}
+          {!vault.poolExists && (
+            <div className="mb-4 border border-[var(--warning)]/30 bg-[var(--warning)]/5 rounded-sm px-3 py-2">
+              <span className="text-[11px] font-medium text-[var(--warning)]">
+                ⚠ Vault Not Initialized
+              </span>
+              <span className="block text-[10px] text-[var(--text-secondary)] mt-0.5">
+                This market&apos;s LP pool has not been created on-chain yet — deposits are unavailable.
+              </span>
+            </div>
+          )}
 
           {/* OI Capacity meter */}
           <OiCapMeter
@@ -86,10 +99,12 @@ export function VaultCard({ vault }: VaultCardProps) {
           {/* CTA */}
           <div className="mt-4 flex items-center justify-between">
             <span className="text-[11px] text-[var(--text-secondary)]">
-              Fee: {(vault.tradingFeeBps / 100).toFixed(2)}%
+              {vault.tradingFeeBps > 0
+                ? `Fee: ${(vault.tradingFeeBps / 100).toFixed(2)}%`
+                : 'Fee: —'}
             </span>
             <span className="text-[11px] font-medium text-[var(--accent)] opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-              Deposit →
+              {vault.poolExists ? 'Deposit →' : 'View →'}
             </span>
           </div>
         </div>

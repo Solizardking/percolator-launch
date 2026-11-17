@@ -11,7 +11,6 @@ import { useStakeWithdraw } from '@/hooks/useStakeWithdraw';
 import { useEngineState } from '@/hooks/useEngineState';
 import { useEarnStats, type MarketVaultInfo } from '@/hooks/useEarnStats';
 import { useTokenMeta } from '@/hooks/useTokenMeta';
-import { getSupabase } from '@/lib/supabase';
 import { BLOCKED_SLAB_ADDRESSES as BLOCKED_MARKET_ADDRESSES } from '@/lib/blocklist';
 import { OiCapMeter } from '@/components/earn/OiCapMeter';
 import { ScrollReveal } from '@/components/ui/ScrollReveal';
@@ -94,21 +93,31 @@ function VaultDetailInner({ slabAddress }: { slabAddress: string }) {
     return earnStats.markets.find((m) => m.slabAddress === slabAddress) ?? null;
   }, [earnStats.markets, slabAddress]);
 
-  // Fallback: fetch symbol directly from Supabase if market not in earn stats
-  // (e.g., market status is not 'active' so it's filtered out of useEarnStats)
+  // Fallback: look the symbol up in the market directory if the market is
+  // not in earn stats. Previously this read markets_with_stats directly
+  // from the browser — that view matches zero rows in this deployment, so
+  // the fallback never resolved. /api/markets is the same directory
+  // useEarnStats consumes.
   const [fallbackSymbol, setFallbackSymbol] = useState<string | null>(null);
   useEffect(() => {
     if (marketInfo || earnLoading) return;
     let cancelled = false;
-    getSupabase()
-      .from('markets_with_stats')
-      .select('symbol, name')
-      .eq('slab_address', slabAddress)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!cancelled && data?.symbol) {
-          setFallbackSymbol(data.symbol);
+    fetch('/api/markets?include_zombie=true&limit=500', {
+      headers: { Accept: 'application/json' },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (cancelled || !body || !Array.isArray(body.markets)) return;
+        const row = body.markets.find(
+          (m: { slab_address?: string }) => m.slab_address === slabAddress,
+        );
+        if (row?.symbol) {
+          setFallbackSymbol(row.symbol);
         }
+      })
+      .catch(() => {
+        // Directory unavailable — symbol stays UNKNOWN; pool state below
+        // still comes from on-chain reads and is unaffected.
       });
     return () => { cancelled = true; };
   }, [marketInfo, earnLoading, slabAddress]);
@@ -242,7 +251,7 @@ function VaultDetailInner({ slabAddress }: { slabAddress: string }) {
             </StatCell>
             <StatCell label="Max Leverage" loading={loading}>
               <span className="text-sm font-mono tabular-nums text-[var(--text)]">
-                {marketInfo?.maxLeverage || 10}×
+                {marketInfo?.maxLeverage ? `${marketInfo.maxLeverage}×` : '—'}
               </span>
             </StatCell>
           </div>
@@ -327,7 +336,7 @@ function VaultDetailInner({ slabAddress }: { slabAddress: string }) {
               />
               <InfoRow
                 label="Trading Fee"
-                value={`${(marketInfo?.tradingFeeBps ?? 10) / 100}%`}
+                value={marketInfo?.tradingFeeBps ? `${marketInfo.tradingFeeBps / 100}%` : '—'}
               />
               <InfoRow
                 label="Pool Status"

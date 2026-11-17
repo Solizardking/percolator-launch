@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { validateNumericParam } from "@/lib/route-validators";
 import { parseHeader, parseConfig } from "@percolatorct/sdk";
-import { getServiceClient, getServerNetwork } from "@/lib/supabase";
+import { getServiceClient, getSupabase, getServerNetwork } from "@/lib/supabase";
 import { getConfig } from "@/lib/config";
 import { getClientIp } from "@/lib/get-client-ip";
 import * as Sentry from "@sentry/nextjs";
@@ -390,7 +390,24 @@ export const dynamic = "force-dynamic";
 // GET /api/markets — list all active markets with stats
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getServiceClient();
+    // Client resolution: prefer the service-role client. The web deployment
+    // does NOT carry SUPABASE_SERVICE_ROLE_KEY (only the API service does),
+    // so getServiceClient() throws before any query runs — which used to
+    // send EVERY request to the static directory fallback, whose rows carry
+    // null stat fields that downstream pages then misread as "no markets".
+    // Degrade to the anon client instead (public market data; same pattern
+    // as /api/stake/pools). The static directory remains the last resort
+    // when no Supabase client can be constructed at all.
+    let supabase: ReturnType<typeof getServiceClient>;
+    try {
+      supabase = getServiceClient();
+    } catch {
+      try {
+        supabase = getSupabase() as ReturnType<typeof getServiceClient>;
+      } catch {
+        return fallbackMarketsResponse(request, "supabase-not-configured");
+      }
+    }
     // GH#1781: Exclude zombie markets with null slab_address at the DB layer.
     // These are incomplete DB rows (TEST x2, BREW, LOBSTAR) with no on-chain account —
     // they have slab=null, mainnet_ca=null, vault_balance=null and cannot be indexed.
@@ -488,6 +505,16 @@ export async function GET(request: NextRequest) {
         tags: { endpoint: "/api/markets", method: "GET" },
       });
       return fallbackMarketsResponse(request, "supabase-query-error");
+    }
+
+    // Empty result: the stats view currently matches zero rows for this
+    // deployment's markets (the indexer-written view rows aren't visible to
+    // the clients this service can construct), but the markets themselves
+    // exist on-chain and in the directory. Serve the static directory —
+    // the same degraded response as a query error — rather than reporting
+    // "0 markets" for a directory that demonstrably has markets.
+    if (!data || data.length === 0) {
+      return fallbackMarketsResponse(request, "supabase-empty-result");
     }
 
     // Sanitize funding_rate: raw DB values from uninitialized slabs can be

@@ -1,8 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { getBackendUrl } from '@/lib/config';
-import { getSupabase } from '@/lib/supabase';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { isMockMode } from '@/lib/mock-mode';
 import { isBlockedSlab } from '@/lib/blocklist';
 
@@ -14,7 +12,13 @@ export interface MarketVaultInfo {
   slabAddress: string;
   symbol: string;
   name: string;
-  /** Vault collateral balance (lamports) */
+  /**
+   * Whether this market's stake pool exists on-chain (from /api/stake/pools).
+   * False means the Earn vault was never initialized — the UI must label it
+   * truthfully instead of offering a deposit form.
+   */
+  poolExists: boolean;
+  /** Stake-pool vault collateral balance (raw base units, read on-chain) */
   vaultBalance: number;
   /** Total open interest (long + short, in USD) */
   totalOI: number;
@@ -24,9 +28,9 @@ export interface MarketVaultInfo {
   insuranceFund: number;
   /** 24h volume in USD */
   volume24h: number;
-  /** Trading fee bps */
+  /** Trading fee bps (0 when the serving data doesn't carry it) */
   tradingFeeBps: number;
-  /** Max leverage */
+  /** Max leverage (0 when the serving data doesn't carry it) */
   maxLeverage: number;
   /** Annualised APY estimate based on fee revenue */
   estimatedApyPct: number;
@@ -74,6 +78,43 @@ const DEFAULT_STATS: EarnStats = {
 };
 
 // ═══════════════════════════════════════════════════════════════
+// API row shapes
+//
+// Numeric fields may arrive as strings (Supabase NUMERIC columns
+// serialize as strings through /api/markets), so every numeric read
+// goes through numOr().
+// ═══════════════════════════════════════════════════════════════
+
+interface MarketsApiRow {
+  slab_address?: string | null;
+  symbol?: string | null;
+  name?: string | null;
+  decimals?: number | string | null;
+  max_leverage?: number | string | null;
+  trading_fee_bps?: number | string | null;
+  insurance_fund?: number | string | null;
+  volume_24h?: number | string | null;
+  total_open_interest?: number | string | null;
+  open_interest_long?: number | string | null;
+  open_interest_short?: number | string | null;
+}
+
+interface StakePoolsApiRow {
+  slabAddress: string;
+  /** Raw SPL token amount in the pool vault (base units), as a string */
+  tvlRaw?: string | null;
+  /** Trailing APR % computed by /api/stake/pools (0 without history) */
+  apr?: number | null;
+}
+
+/** Coerce an API numeric (number | string | null) to a number with fallback. */
+function numOr(v: number | string | null | undefined, fallback: number): number {
+  if (v == null) return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Mock data — EXPLICIT MOCK MODE ONLY (isMockMode: env flag or ?mock=1,
 // both covered by the site-wide mock banner). Never used as a fallback
 // for missing/erroring live data.
@@ -93,7 +134,7 @@ function generateMockStats(): EarnStats {
       tradingFeeBps: 10,
       maxLeverage: 20,
       estimatedApyPct: 18.7,
-      oiUtilPct: 18.1, decimals: 9,
+      oiUtilPct: 18.1, decimals: 9, poolExists: true,
     },
     {
       slabAddress: 'mock-bonk-perp',
@@ -107,7 +148,7 @@ function generateMockStats(): EarnStats {
       tradingFeeBps: 15,
       maxLeverage: 10,
       estimatedApyPct: 24.3,
-      oiUtilPct: 13.0, decimals: 6,
+      oiUtilPct: 13.0, decimals: 6, poolExists: true,
     },
     {
       slabAddress: 'mock-wif-perp',
@@ -121,7 +162,7 @@ function generateMockStats(): EarnStats {
       tradingFeeBps: 15,
       maxLeverage: 10,
       estimatedApyPct: 31.2,
-      oiUtilPct: 18.8, decimals: 6,
+      oiUtilPct: 18.8, decimals: 6, poolExists: true,
     },
     {
       slabAddress: 'mock-jup-perp',
@@ -135,7 +176,7 @@ function generateMockStats(): EarnStats {
       tradingFeeBps: 12,
       maxLeverage: 15,
       estimatedApyPct: 15.8,
-      oiUtilPct: 12.4, decimals: 6,
+      oiUtilPct: 12.4, decimals: 6, poolExists: true,
     },
   ];
 
@@ -184,57 +225,76 @@ export function useEarnStats() {
     }
 
     try {
-      let supabase: ReturnType<typeof getSupabase>;
-      try {
-        supabase = getSupabase();
-      } catch {
-        // No Supabase configured — show the true empty state, never mock
-        // figures presented as live. Mock data is only for explicit mock
-        // mode (isMockMode), which is banner-labeled site-wide.
-        setError('Live vault stats unavailable — database not configured');
-        setStats(DEFAULT_STATS);
-        setLoading(false);
-        return;
+      // Live data comes from the app's own APIs — NOT a direct browser
+      // read of the Supabase markets_with_stats view. That view matches
+      // zero rows for this deployment's markets from the browser's anon
+      // client, and the previous implementation additionally required
+      // status='active', which none of the serving rows carry — so /earn
+      // rendered "No active vaults found" (and surfaced the failed view
+      // read as a "Failed to fetch" toast) even with markets and stake
+      // pools live on-chain.
+      //   - /api/markets     → the market directory (symbol, name,
+      //                        decimals, leverage/fee config, indexer
+      //                        stats when the DB path serves them)
+      //   - /api/stake/pools → the on-chain stake pools (vault balances,
+      //                        trailing APR)
+      // Every directory market gets a vault card; the pool join decides
+      // whether deposits are actually possible (poolExists).
+      const [marketsRes, poolsRes] = await Promise.all([
+        fetch('/api/markets?include_zombie=true&limit=500', {
+          headers: { Accept: 'application/json' },
+        }),
+        fetch('/api/stake/pools', {
+          headers: { Accept: 'application/json' },
+        }),
+      ]);
+      if (!marketsRes.ok) {
+        throw new Error(`Markets API returned ${marketsRes.status}`);
+      }
+      if (!poolsRes.ok) {
+        throw new Error(`Stake pools API returned ${poolsRes.status}`);
+      }
+      const marketsBody = (await marketsRes.json()) as {
+        markets?: MarketsApiRow[];
+      };
+      const poolsBody = (await poolsRes.json()) as {
+        pools?: StakePoolsApiRow[];
+      };
+      if (!Array.isArray(marketsBody.markets) || !Array.isArray(poolsBody.pools)) {
+        throw new Error('Unexpected response from markets/pools APIs');
       }
 
-      const { data, error: dbError } = await supabase
-        .from('markets_with_stats')
-        .select('*');
+      const poolBySlab = new Map(
+        poolsBody.pools.map((p) => [p.slabAddress, p] as const),
+      );
 
-      if (dbError) {
-        throw new Error(dbError.message);
-      }
-
-      if (!data || data.length === 0) {
-        // No markets in the stats view — render the true zero/empty state.
-        // (Previously this silently substituted mock stats, which made an
-        // empty devnet deployment display invented TVL/APY/insurance.)
-        setStats(DEFAULT_STATS);
-        setError(null);
-        setLoading(false);
-        return;
-      }
-
-      const markets: MarketVaultInfo[] = data
-        // Skip blocked/stale slabs — excluded from /api/markets but visible to anon client.
-        .filter((m) => !isBlockedSlab(m.slab_address))
-        .filter((m) => m.status === 'active' || m.status === 'Active')
+      const markets: MarketVaultInfo[] = marketsBody.markets
+        // Skip blocked slabs (the API already excludes them; defense in depth).
+        .filter((m) => !!m.slab_address && !isBlockedSlab(m.slab_address as string))
         .map((m) => {
-          const oiLongRaw = m.open_interest_long ?? 0;
-          const oiShortRaw = m.open_interest_short ?? 0;
-          const totalOIRaw = m.total_open_interest ?? oiLongRaw + oiShortRaw;
+          const slabAddress = m.slab_address as string;
+          const pool = poolBySlab.get(slabAddress);
+          const oiLongRaw = numOr(m.open_interest_long, 0);
+          const oiShortRaw = numOr(m.open_interest_short, 0);
+          const totalOIRaw = numOr(
+            m.total_open_interest,
+            oiLongRaw + oiShortRaw,
+          );
           // Sentinel filter: u64::MAX (≈1.84e19) leaks from uninitialized on-chain fields.
           // Any value above 1e18 is garbage — treat as 0.
           const isSentinel = (v: number) => v > 1e18;
-          const collDecimals = m.decimals ?? 6;
+          const collDecimals = numOr(m.decimals, 6);
           const collDivisor = 10 ** collDecimals;
           // OI values are stored in collateral micro-units — convert to human units
           const totalOI = isSentinel(totalOIRaw) ? 0 : totalOIRaw / collDivisor;
-          const maxLeverage = m.max_leverage || 10;
-          // Fix GH#1204: use vault_balance (actual on-chain deposits) not lp_collateral
-          // (bootstrap config constant). lp_collateral = 10^11 for NNOB-PERP at 6 decimals
-          // = $100K TVL even when vault has zero actual deposits.
-          const vaultBalanceRaw = m.vault_balance ?? 0;
+          const maxLeverage = numOr(m.max_leverage, 0);
+          // Vault balance = the stake pool's actual on-chain vault balance.
+          // /api/stake/pools' tvlRaw is the raw SPL amount sitting in the
+          // pool vault (base units) — the real deposit total, read from the
+          // chain by the server. (The stats view's vault_balance described
+          // the trading vault, not the Earn stake pool, and reads zero rows
+          // in this deployment anyway.)
+          const vaultBalanceRaw = pool ? Number(pool.tvlRaw ?? 0) : 0;
           // Two-stage filter for vault_balance:
           // 1. Sentinel guard: u64::MAX (>1e18) leaks from uninitialized on-chain fields.
           // 2. USD cap: compute human-readable amount and reject if > $10M per vault.
@@ -242,15 +302,12 @@ export function useEarnStats() {
           const MAX_VAULT_USD = 10_000_000; // $10M per vault — generous devnet ceiling
           const vaultBalanceHuman = isSentinel(vaultBalanceRaw) ? Infinity : vaultBalanceRaw / collDivisor;
           const vaultBalance = vaultBalanceHuman > MAX_VAULT_USD ? 0 : vaultBalanceRaw;
-          const tradingFeeBpsRaw = m.trading_fee_bps ?? 10;
+          const tradingFeeBpsRaw = numOr(m.trading_fee_bps, 0);
           const tradingFeeBps = tradingFeeBpsRaw > 5_000 ? 0 : tradingFeeBpsRaw;
-          const volume24hRaw = m.volume_24h ?? 0;
+          const volume24hRaw = numOr(m.volume_24h, 0);
           // Normalize to human-readable collateral units (same as totalOI).
-          // volume_24h is stored as raw on-chain micro-units — divide by collDivisor
-          // before using in APY calculation or display. Without this, a $100K USDC
-          // market would show "$100B" volume and ~73,000,000% APY.
           const volume24h = isSentinel(volume24hRaw) ? 0 : volume24hRaw / collDivisor;
-          const insuranceRaw = m.insurance_fund ?? 0;
+          const insuranceRaw = numOr(m.insurance_fund, 0);
           // Sanity cap: insurance_fund values > 10 billion USDC micro-units ($10M)
           // are corrupt data from bad slab tier detection — clamp to 0
           const insurance = insuranceRaw < 1e13 ? insuranceRaw : 0;
@@ -258,22 +315,23 @@ export function useEarnStats() {
           // Max OI = vault collateral × max leverage (simplified)
           const vaultUsd = vaultBalance / collDivisor;
           const rawMaxOI = vaultUsd * maxLeverage;
-          // GH#1231: on devnet, vault deposits can be tiny while accumulated OI is large.
+          // On devnet, vault deposits can be tiny while accumulated OI is large.
           // Clamp displayMaxOI so it is never less than totalOI — prevents confusing
           // "Max: $343" display when Current OI is already $57K.
           const maxOI = Math.max(rawMaxOI, totalOI);
           const oiUtilPct = maxOI > 0 ? (totalOI / maxOI) * 100 : 0;
 
-          // Estimated APY: (daily fees × 365) / TVL × 100
-          const dailyFees = (volume24h * tradingFeeBps) / 10_000;
-          const annualFees = dailyFees * 365;
-          const estimatedApyPct =
-            vaultUsd > 0 ? (annualFees / vaultUsd) * 100 : 0;
+          // APY: the pools route's trailing APR (insurance-snapshot
+          // redemption-rate growth). 0 when no snapshot history exists;
+          // the header only presents an APY figure when avgApyAvailable
+          // (at least one vault actually holds deposits).
+          const estimatedApyPct = pool?.apr ?? 0;
 
           return {
-            slabAddress: m.slab_address ?? '',
+            slabAddress,
             symbol: m.symbol ?? 'UNKNOWN',
             name: m.name ?? m.symbol ?? 'Unknown',
+            poolExists: !!pool,
             vaultBalance,
             totalOI,
             maxOI,

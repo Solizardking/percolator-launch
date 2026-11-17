@@ -309,6 +309,16 @@ function MarketsPageInner() {
 
       // GH#1531: Show all non-zombie Supabase markets — counter matches /api/markets total.
       if (m.supabase) {
+        // The /api/markets response carries the server's own is_zombie
+        // verdict, computed from the full DB row (the static directory
+        // fallback tags its curated entries is_zombie=false). Trust it
+        // when present: re-deriving zombie status client-side from the
+        // partial stats fields hid EVERY market whenever the API served
+        // its directory fallback — those rows carry null stat fields,
+        // and isZombieMarket() reads null-vault + no-stats as zombie,
+        // so this page showed 0 markets while /api/markets reported 9.
+        const apiIsZombie = (m.supabase as MarketWithStats & { is_zombie?: boolean | null }).is_zombie;
+        if (typeof apiIsZombie === "boolean") return !apiIsZombie;
         const zombie = isZombieMarket({
           vault_balance: numericOrNull(m.supabase.vault_balance),
           c_tot: numericOrNull(m.supabase.c_tot),
