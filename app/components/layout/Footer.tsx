@@ -54,7 +54,7 @@ export const Footer: FC = () => {
               </svg>
             </a>
             <a
-              href="https://discord.gg/fJa4BDBxPN"
+              href="https://discord.gg/xB9kjQRTdr"
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-7 w-7 items-center justify-center rounded-sm border border-[var(--border)] text-[var(--text-muted)] transition-all hover:border-[#5865F2]/40 hover:text-[#5865F2] hover:bg-[#5865F2]/[0.06]"

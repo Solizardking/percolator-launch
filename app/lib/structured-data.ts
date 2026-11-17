@@ -4,7 +4,7 @@ const LOGO_URL = `${SITE_URL}/icon.png`;
 const SAME_AS = [
   "https://x.com/0rdlibrary",
   "https://github.com/solizardking",
-  "https://discord.gg/fJa4BDBxPN",
+  "https://discord.gg/xB9kjQRTdr",
 ];
 
 /** Organization schema — sitewide brand/entity signals. */

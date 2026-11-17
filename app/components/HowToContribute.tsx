@@ -146,7 +146,7 @@ export const HowToContribute: FC<Props> = ({
       {/* Bottom CTA */}
       <div className="flex flex-wrap items-center justify-center gap-3">
         <a
-          href="https://discord.gg/fJa4BDBxPN"
+          href="https://discord.gg/xB9kjQRTdr"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 rounded-lg border border-[rgba(88,101,242,0.30)] bg-[rgba(88,101,242,0.12)] px-5 py-2.5 text-sm font-medium text-[#7984f5] transition-all duration-200 hover:bg-[rgba(88,101,242,0.20)]"
