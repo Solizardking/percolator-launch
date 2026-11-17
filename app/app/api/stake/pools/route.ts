@@ -11,7 +11,7 @@
 
 import { NextResponse } from "next/server";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { getServiceClient, getServerNetwork } from "@/lib/supabase";
+import { getServiceClient, getSupabase, getServerNetwork } from "@/lib/supabase";
 import { getRpcEndpoint } from "@/lib/config";
 import { STAKE_POOL_MIN_SIZE } from "@/lib/stakePool";
 import { getStakeProgramId } from "@percolatorct/sdk";
@@ -400,9 +400,24 @@ export async function GET() {
       }
     }
 
-    // 4. Cross-reference slab addresses with Supabase market data + APR
+    // 4. Cross-reference slab addresses with Supabase market data + APR.
+    // Prefer the service-role client; when it isn't configured on this
+    // deployment (the web service doesn't carry SUPABASE_SERVICE_ROLE_KEY
+    // — only the API service does), fall back to the anon client,
+    // mirroring how sibling routes degrade (/api/markets' static
+    // fallback, /api/leaderboard's anon reads). Everything read here is
+    // public market data the browser already reads with the anon key
+    // (markets_with_stats; insurance_snapshots for APR — if that read is
+    // denied, computeAprs degrades to APR 0 rather than failing the
+    // route). Without this fallback the route 500'd on the web service
+    // even with healthy on-chain pools.
     const slabAddresses = parsed.map((p) => p.pool.slab);
-    const supabase = getServiceClient();
+    let supabase: ReturnType<typeof getServiceClient>;
+    try {
+      supabase = getServiceClient();
+    } catch {
+      supabase = getSupabase() as ReturnType<typeof getServiceClient>;
+    }
     // PERC-8195: filter by network so devnet/mainnet rows don't mix
     const [marketsResult, aprBySlab] = await Promise.all([
       supabase
