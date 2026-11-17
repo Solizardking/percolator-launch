@@ -12,6 +12,7 @@ import { TickerBanner } from "@/components/layout/TickerBanner";
 import { CursorGlow } from "@/components/ui/CursorGlow";
 import { MusicPlayer } from "@/components/ui/MusicPlayer";
 import { MainnetBetaBanner } from "@/components/layout/MainnetBetaBanner";
+import { MockModeBanner } from "@/components/layout/MockModeBanner";
 import { ChromeGate } from "@/components/layout/ChromeGate";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { organizationSchema, websiteSchema } from "@/lib/structured-data";
@@ -106,6 +107,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <ChromeGate>
               <TickerBanner />
               <MainnetBetaBanner />
+              <MockModeBanner />
             </ChromeGate>
             <Header />
             <main className="flex-1 pb-[60px] md:pb-0">{children}</main>

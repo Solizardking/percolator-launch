@@ -5,6 +5,7 @@ import { useLivePrice } from "@/hooks/useLivePrice";
 import { useMarketInfo } from "@/hooks/useMarketInfo";
 import { useEngineState } from "@/hooks/useEngineState";
 import { useOracleFreshness } from "@/hooks/useOracleFreshness";
+import { useSpotPrices } from "@/hooks/useSpotPrices";
 import { MarketLogo } from "@/components/market/MarketLogo";
 import { formatUsdFromNumber } from "@/lib/format";
 
@@ -69,6 +70,16 @@ export const MarketInfoBar: FC<MarketInfoBarProps> = ({ slabAddress, symbol, log
   const { fundingRate, engine } = useEngineState();
   const { level: oracleLevel } = useOracleFreshness();
 
+  // Jupiter spot REFERENCE for the pair token (mainnet mint). Reference
+  // only — the mark price above stays the slab oracle price. Renders
+  // nothing when Jupiter has no price for this mint (e.g. devnet mints).
+  const { prices: spotPrices } = useSpotPrices(mintAddress ? [mintAddress] : [], 15_000);
+  const spot = mintAddress ? spotPrices[mintAddress] : undefined;
+  const spotDeviation =
+    spot && priceUsd != null && priceUsd > 0
+      ? ((priceUsd - spot.price) / spot.price) * 100
+      : null;
+
   const priceDisplay = formatUsdFromNumber(priceUsd);
 
   const change24hDisplay = change24h ?? 0;
@@ -132,6 +143,25 @@ export const MarketInfoBar: FC<MarketInfoBarProps> = ({ slabAddress, symbol, log
       >
         {change24h == null ? "0.00%" : `${isUp ? "+" : ""}${change24hDisplay.toFixed(2)}%`}
       </span>
+
+      {/* Jupiter spot reference + slab deviation */}
+      {spot && (
+        <span
+          className="shrink-0 text-[10px] leading-tight text-[var(--text-dim)]"
+          style={{ fontFamily: "var(--font-mono)" }}
+          title="Jupiter spot reference price — the mark price above is this market's slab oracle price"
+        >
+          <span className="block text-[8px] uppercase tracking-[0.12em]">Jupiter spot</span>
+          <span className="text-[11px] text-[var(--text-secondary)] tabular-nums">
+            {formatUsdFromNumber(spot.price)}
+          </span>
+          {spotDeviation != null && Math.abs(spotDeviation) >= 0.5 && (
+            <span className={Math.abs(spotDeviation) >= 5 ? "text-red-400" : "text-[var(--text-secondary)]"}>
+              {" "}· mark {spotDeviation >= 0 ? "+" : ""}{spotDeviation.toFixed(1)}%
+            </span>
+          )}
+        </span>
+      )}
 
       <span className="h-4 w-px bg-[var(--border)]/40 shrink-0" />
 

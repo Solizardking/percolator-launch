@@ -23,6 +23,7 @@ import { useAllMarketStats } from "@/hooks/useAllMarketStats";
 import { MarketLogo } from "@/components/market/MarketLogo";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { detectOracleMode, resolveMarketPriceE6, priceE6ToUsd } from "@/lib/oraclePrice";
+import { useSpotPrices } from "@/hooks/useSpotPrices";
 import { formatStatValue } from "@/lib/format";
 import { MIN_VAULT_FOR_OI } from "@/lib/phantom-oi";
 
@@ -550,6 +551,23 @@ function MarketsPageInner() {
   }, [debouncedSearch, leverageFilter, oracleFilter, sortBy]);
 
   const displayedMarkets = filtered.slice(0, displayCount);
+
+  // Jupiter spot REFERENCE prices for the visible markets' pair tokens
+  // (mainnet mints via supabase mainnet_ca when known). Reference only —
+  // the slab oracle price stays the market's price; this just shows how
+  // far the slab mark sits from spot. Mints Jupiter doesn't know (e.g.
+  // devnet mirror mints) simply return no entry and render nothing.
+  const spotMints = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of displayedMarkets) {
+      const mint = resolveMarketLogoMintAddress(m);
+      if (mint) set.add(mint);
+    }
+    return [...set].slice(0, 50);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayedMarkets.map((m) => m.slabAddress).join(",")]);
+  const { prices: spotPrices } = useSpotPrices(spotMints, 30_000);
+
   const loading = discoveryLoading || statsLoading;
   const showDegradedBanner = Boolean(loadErrorMessage && !loading && filtered.length > 0);
 
@@ -1011,6 +1029,26 @@ function MarketsPageInner() {
                         <span className="text-sm text-[var(--text)] tabular-nums" style={{ fontFamily: "var(--font-jetbrains-mono)", fontVariantNumeric: "tabular-nums" }}>
                           {formatUsdFromNumber(lastPrice)}
                         </span>
+                        {(() => {
+                          const spotMint = logoMintAddress || m.mintAddress;
+                          const spot = spotMint ? spotPrices[spotMint] : undefined;
+                          if (!spot) return null;
+                          const deviation =
+                            lastPrice != null && lastPrice > 0
+                              ? ((lastPrice - spot.price) / spot.price) * 100
+                              : null;
+                          const showDeviation = deviation != null && Math.abs(deviation) >= 0.5;
+                          return (
+                            <div className="text-[10px] text-[var(--text-muted)] tabular-nums" style={{ fontFamily: "var(--font-jetbrains-mono)" }}>
+                              Jup {formatUsdFromNumber(spot.price)}
+                              {showDeviation && (
+                                <span className={Math.abs(deviation) >= 5 ? "text-[var(--short)]" : "text-[var(--text-secondary)]"}>
+                                  {" "}· slab {deviation >= 0 ? "+" : ""}{deviation.toFixed(1)}%
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div className="hidden sm:block text-right text-sm text-[var(--text-secondary)] truncate tabular-nums" style={{ fontFamily: "var(--font-jetbrains-mono)", fontVariantNumeric: "tabular-nums" }}>{oiDisplay}</div>
                       <div className="hidden sm:block text-right text-sm text-[var(--text-secondary)] truncate tabular-nums" style={{ fontFamily: "var(--font-jetbrains-mono)", fontVariantNumeric: "tabular-nums" }}>

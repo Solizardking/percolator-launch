@@ -2,6 +2,8 @@
 
 import { FC, useMemo } from "react";
 import { type SlabTierKey, SLAB_TIERS } from "@/lib/slabTiers";
+import { useSpotPrices, useNowTick, ageSeconds } from "@/hooks/useSpotPrices";
+import { SOL_MINT } from "@/lib/spotPrices";
 
 interface CostEstimateProps {
   slabTier: SlabTierKey;
@@ -34,6 +36,20 @@ export const CostEstimate: FC<CostEstimateProps> = ({
   tokenPriceUsd,
   className = "",
 }) => {
+  // Real SOL spot price (Jupiter, via /api/prices/spot) for the USD
+  // equivalent of the SOL total. Shown ONLY while fresh (<30s old,
+  // not a stale-cache fallback); otherwise the SOL amount stands
+  // alone — never display a stale USD number.
+  const { prices: spotPrices, fetchedAt: spotFetchedAt, stale: spotStale, error: spotError } =
+    useSpotPrices([SOL_MINT], 15_000);
+  const now = useNowTick(1_000);
+  const spotAge = ageSeconds(spotFetchedAt, now);
+  const solSpot = spotPrices[SOL_MINT];
+  const solUsdFresh =
+    solSpot != null && !spotStale && !spotError && spotAge != null && spotAge < 30
+      ? solSpot.price
+      : null;
+
   const estimate = useMemo(() => {
     const tier = SLAB_TIERS[slabTier];
     const dataSize = tier.dataSize;
@@ -100,9 +116,17 @@ export const CostEstimate: FC<CostEstimateProps> = ({
         </div>
         <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
           <span className="text-[11px] font-semibold text-[var(--text)]">Total SOL Required</span>
-          <span className="text-[13px] font-bold font-mono text-[var(--accent)]">
-            ~{estimate.totalSolCost} SOL
-          </span>
+          <div className="text-right">
+            <span className="text-[13px] font-bold font-mono text-[var(--accent)]">
+              ~{estimate.totalSolCost} SOL
+            </span>
+            {solUsdFresh != null && (
+              <p className="text-[10px] text-[var(--text-secondary)]">
+                ≈ ${(parseFloat(estimate.totalSolCost) * solUsdFresh).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                <span className="text-[var(--text-muted)]"> · Jupiter · updated {spotAge}s ago</span>
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
