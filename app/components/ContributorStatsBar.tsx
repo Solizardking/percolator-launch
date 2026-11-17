@@ -54,11 +54,6 @@ const stats_config = [
   { key: "repoCount" as const, label: "Repos" },
   { key: "totalOpenIssues" as const, label: "Open Issues" },
   { key: "totalCommits" as const, label: "Total Commits" },
-  {
-    key: null,
-    label: "Lines of Code",
-    static: "50k+",
-  },
   { key: "isActive" as const, label: "Build Status" },
 ];
 
@@ -90,14 +85,12 @@ export const ContributorStatsBar: FC<Props> = ({ stats }) => {
       className="border-y border-[var(--border)] py-8 sm:py-8"
       style={{ background: "var(--bg-elevated, #1a1a28)" }}
     >
-      <div className="mx-auto grid max-w-7xl grid-cols-2 gap-y-6 px-6 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="mx-auto grid max-w-7xl grid-cols-2 gap-y-6 px-6 sm:grid-cols-3 xl:grid-cols-5">
         {stats_config.map((cfg, i) => {
           let valueNode: React.ReactNode;
 
           if (cfg.key === "isActive") {
             valueNode = stats ? (stats.isActive ? "Active" : "Quiet") : "—";
-          } else if (cfg.static) {
-            valueNode = cfg.static;
           } else if (cfg.key && stats) {
             const val = stats[cfg.key] as number;
             // Show dash only for undefined/null/NaN — display 0 as a real value
@@ -137,6 +130,12 @@ export const ContributorStatsBar: FC<Props> = ({ stats }) => {
             </div>
           );
         })}
+      </div>
+      <div
+        className="mt-6 px-6 text-center text-[10px] uppercase tracking-[0.15em] text-[var(--text-muted,rgba(255,255,255,0.30))]"
+        style={{ fontFamily: "var(--font-mono, 'JetBrains Mono')" }}
+      >
+        Live from the GitHub API · github.com/solizardking · server-cached, refreshes every few minutes
       </div>
     </div>
   );

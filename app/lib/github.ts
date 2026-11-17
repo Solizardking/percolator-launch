@@ -52,42 +52,29 @@ export interface RepoCIStatus {
   passing: boolean | null;
 }
 
-/** Hardcoded repo list — order determines fallback display order */
-export const REPOS = [
-  "percolator-launch",
-  "percolator-prog",
-  "percolator",
-  "percolator-sdk",
-  "percolator-stake",
-  "percolator-nft",
-  "percolator-mobile",
-] as const;
+/** Canonical GitHub account for this project (matches the site's social links) */
+export const GITHUB_ORG = "Solizardking";
 
-/** Fallback descriptions when GitHub API fails */
+/**
+ * Hardcoded repo list — order determines fallback display order.
+ * Only repos that are actually public under the canonical account belong
+ * here; listing repos from any other org presents that org's activity
+ * (stars, commits, contributors) as this project's, which is fabrication.
+ */
+export const REPOS = ["percolator-launch", "percolator-prog"] as const;
+
+/** Fallback descriptions when GitHub API fails (verbatim repo descriptions) */
 export const REPO_DESCRIPTIONS: Record<string, string> = {
   "percolator-launch":
-    "Permissionless perpetual futures launcher — deploy a perp market for any Solana token",
-  percolator:
-    "No-std Rust risk engine — H + A/K mechanics, formally verified with Kani",
-  "percolator-prog": "Percolator programs",
-  "percolator-stake":
-    "Insurance LP staking — PDA admin architecture, Kani formal verification",
-  "percolator-sdk":
-    "TypeScript SDK for interacting with Percolator on-chain programs",
-  "percolator-nft":
-    "Token2022 Position NFTs — transfer your perpetual futures positions via Transfer Hooks",
-  "percolator-mobile": "Solana Seeker mobile app",
+    "Permissionless perpetual futures launcher — deploy a perp market for any Solana token in one click",
+  "percolator-prog":
+    "Solana program wrapping the Percolator v16 risk engine (fork of aeyakovenko/percolator-prog) — unaudited, educational",
 };
 
 /** Fallback languages */
 export const REPO_LANGUAGES: Record<string, string> = {
   "percolator-launch": "TypeScript",
-  percolator: "Rust",
   "percolator-prog": "Rust",
-  "percolator-stake": "Rust",
-  "percolator-sdk": "TypeScript",
-  "percolator-nft": "Rust",
-  "percolator-mobile": "TypeScript",
 };
 
 /** Language colour dots (GitHub standard) */
@@ -103,7 +90,7 @@ export const DEFAULT_LANGUAGE_COLOR = "rgba(255,255,255,0.25)";
 async function fetchRepo(repo: string): Promise<RepoData | null> {
   try {
     const res = await fetch(
-      `https://api.github.com/repos/dcccrypto/${repo}`,
+      `https://api.github.com/repos/${GITHUB_ORG}/${repo}`,
       { next: { revalidate: 300 } } // ISR: 5-min cache
     );
     if (!res.ok) return null;
@@ -139,7 +126,7 @@ export async function getAllRepos(): Promise<RepoData[]> {
       forks_count: 0,
       open_issues_count: 0,
       updated_at: "", // empty signals "no live data available"
-      html_url: `https://github.com/dcccrypto/${name}`,
+      html_url: `https://github.com/${GITHUB_ORG}/${name}`,
     };
   });
 }
@@ -209,7 +196,7 @@ export async function getContributorStats(): Promise<ContributorStats> {
       // Paginate up to 3 pages (300 contributors) — more than enough
       for (let page = 1; page <= 3; page++) {
         const res = await fetch(
-          `https://api.github.com/repos/dcccrypto/${repo}/contributors?per_page=100&page=${page}&anon=0`,
+          `https://api.github.com/repos/${GITHUB_ORG}/${repo}/contributors?per_page=100&page=${page}&anon=0`,
           { headers: githubHeaders, next: { revalidate: 600 } }
         );
         if (!res.ok) break;
@@ -234,13 +221,13 @@ export async function getContributorStats(): Promise<ContributorStats> {
   const commitActivityResults = await Promise.allSettled(
     REPOS.map(async (repo) => {
       const res = await fetch(
-        `https://api.github.com/repos/dcccrypto/${repo}/stats/commit_activity`,
+        `https://api.github.com/repos/${GITHUB_ORG}/${repo}/stats/commit_activity`,
         { headers: githubHeaders, next: { revalidate: 600 } }
       );
       if (res.status === 202) {
         await new Promise((r) => setTimeout(r, 2000));
         const retry = await fetch(
-          `https://api.github.com/repos/dcccrypto/${repo}/stats/commit_activity`,
+          `https://api.github.com/repos/${GITHUB_ORG}/${repo}/stats/commit_activity`,
           { headers: githubHeaders, next: { revalidate: 600 } }
         );
         if (!retry.ok) return [];
@@ -263,7 +250,7 @@ export async function getContributorStats(): Promise<ContributorStats> {
   // ---- 3. Repo metadata for open_issues + activity signal ----
   const repoResults = await Promise.allSettled(
     REPOS.map((repo) =>
-      fetch(`https://api.github.com/repos/dcccrypto/${repo}`, {
+      fetch(`https://api.github.com/repos/${GITHUB_ORG}/${repo}`, {
         headers: githubHeaders,
         next: { revalidate: 600 },
       }).then((r) => (r.ok ? r.json() : null))
@@ -297,7 +284,7 @@ export async function getAllCommitActivity(): Promise<CommitActivityMap> {
   const results = await Promise.allSettled(
     REPOS.map(async (repo) => {
       const data = await fetchGitHubStats(
-        `https://api.github.com/repos/dcccrypto/${repo}/stats/commit_activity`
+        `https://api.github.com/repos/${GITHUB_ORG}/${repo}/stats/commit_activity`
       );
       return { repo, data: Array.isArray(data) ? data : [] };
     })
@@ -316,7 +303,7 @@ export async function getAllCommitActivity(): Promise<CommitActivityMap> {
 export async function getGoodFirstIssues(): Promise<GoodFirstIssue[]> {
   try {
     const res = await fetch(
-      `https://api.github.com/search/issues?q=org:dcccrypto+label:"good+first+issue"+state:open&sort=created&order=desc&per_page=6`,
+      `https://api.github.com/search/issues?q=repo:${GITHUB_ORG}/percolator-launch+repo:${GITHUB_ORG}/percolator-prog+label:"good+first+issue"+state:open&sort=created&order=desc&per_page=6`,
       { headers: githubHeaders, next: { revalidate: 300 } }
     );
     if (!res.ok) return [];
@@ -366,7 +353,7 @@ export async function getRepoCIStatus(
 
   try {
     const res = await fetch(
-      `https://api.github.com/repos/dcccrypto/${repo}/actions/runs?per_page=10&status=completed`,
+      `https://api.github.com/repos/${GITHUB_ORG}/${repo}/actions/runs?per_page=10&status=completed`,
       { headers: githubHeaders, next: { revalidate: 600 } }
     );
     if (!res.ok) return { passing: null };

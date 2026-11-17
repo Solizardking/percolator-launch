@@ -14,6 +14,7 @@ import { GradientText } from "@/components/ui/GradientText";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { OnboardingIcon } from "@/components/icons/OnboardingIcons";
 import { HeroSection } from "@/components/marketing/HeroSection";
+import { RaiseSection } from "@/components/clawd/RaiseSection";
 import { ShimmerSkeleton } from "@/components/ui/ShimmerSkeleton";
 import { formatUsdFromNumber } from "@/lib/format";
 
@@ -305,6 +306,11 @@ export default function Home() {
       <ErrorBoundary label="Hero Section">
         {/* Pass marketsCount so hero and "Built Different" show the same number (#1145) */}
         <HeroSection marketsCount={statsLoaded ? stats.markets : undefined} />
+      </ErrorBoundary>
+
+      {/* ═══════════════════════ MAINNET RAISE ($CLAWD fees) ═══════════════════════ */}
+      <ErrorBoundary label="Mainnet Raise Section">
+        <RaiseSection />
       </ErrorBoundary>
 
       {/* ═══════════════════════ STATS ═══════════════════════ */}

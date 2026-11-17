@@ -55,6 +55,11 @@ const PrivyProviderClient = dynamic(
 
 export const WalletProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+  // App Client ID for this deployment's domain, configured under the fleet
+  // Privy app. Server env keeps the canonical name PRIVY_CLIENT_ID; the
+  // NEXT_PUBLIC_ twin exposes the same value to the client bundle, the way
+  // NEXT_PUBLIC_PRIVY_APP_ID exposes the app id above.
+  const clientId = process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID;
   const preferredWallet = usePreferredWalletState();
 
   const readOnlyFallback = (
@@ -75,7 +80,7 @@ export const WalletProvider: FC<{ children: ReactNode }> = ({ children }) => {
     <PrivyErrorBoundary fallback={readOnlyFallback}>
       <PrivyAvailableContext.Provider value={true}>
         <PreferredWalletContext.Provider value={preferredWallet}>
-          <PrivyProviderClient appId={appId}>
+          <PrivyProviderClient appId={appId} clientId={clientId}>
             <AutoFundProvider>
               {children}
               {/* PERC-808: Global devnet faucet modal — shown on any page when wallet

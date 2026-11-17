@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServiceClient } from "@/lib/supabase";
+import { getServiceClient, getSupabase } from "@/lib/supabase";
 import { requireAdminSession } from "@/lib/admin-session";
 import { getClientIp } from "@/lib/get-client-ip";
 import { createMemoryRateLimiter } from "@/lib/memory-rate-limit";
@@ -100,7 +100,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "CV too large (max 5MB)" }, { status: 400 });
     }
 
-    const sb = getServiceClient();
+    // Prefer the service-role client; when it isn't configured on this
+    // deployment (the web service doesn't carry SUPABASE_SERVICE_ROLE_KEY
+    // — only the API service does), fall back to the anon client, mirroring
+    // /api/stake/pools. Without this fallback every valid submission 500'd
+    // on the web service because getServiceClient() throws before the
+    // insert is even attempted. Anon inserts depend on the table's RLS
+    // insert policy, which is how the public form is meant to write.
+    let sb: ReturnType<typeof getServiceClient>;
+    try {
+      sb = getServiceClient();
+    } catch {
+      sb = getSupabase() as ReturnType<typeof getServiceClient>;
+    }
     const { error } = await sb.from(TABLE).insert({
       name,
       twitter_handle,

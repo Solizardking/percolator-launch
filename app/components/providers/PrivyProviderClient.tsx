@@ -11,10 +11,11 @@ import { PrivyLoginContext } from "@/hooks/usePrivySafe";
  * Client-only Privy provider wrapper. Loaded via next/dynamic with ssr:false
  * to prevent Privy SDK from crashing during server-side rendering.
  */
-const PrivyProviderClient: FC<{ appId: string; children: ReactNode }> = ({
-  appId,
-  children,
-}) => {
+const PrivyProviderClient: FC<{
+  appId: string;
+  clientId?: string;
+  children: ReactNode;
+}> = ({ appId, clientId, children }) => {
   const solanaConnectors = useMemo(() => toSolanaWalletConnectors(), []);
   const walletConnectCloudProjectId =
     process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
@@ -62,6 +63,7 @@ const PrivyProviderClient: FC<{ appId: string; children: ReactNode }> = ({
   return (
     <PrivyProvider
       appId={appId}
+      clientId={clientId}
       config={{
         appearance: {
           walletChainType: "solana-only",
